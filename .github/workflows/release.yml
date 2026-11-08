@@ -35,3 +35,14 @@ jobs:
             gh release create "$RELEASE_TAG" N80xx-System-2GiB.zip N80xx-System-2GiB.zip.sha256 \
               --verify-tag --prerelease --title "N80xx System 2 GiB — $RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
+      - name: Translate the previous prerelease description
+        if: github.ref_name == 'v0.1.0-rc2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view v0.1.0-rc1 >/dev/null 2>&1; then
+            printf '%s\n\n' 'Superseded by v0.1.0-rc2, which includes English documentation. This earlier tag and its original assets are retained for traceability.' > /tmp/previous-release-notes.md
+            cat RELEASE_NOTES.md >> /tmp/previous-release-notes.md
+            gh release edit v0.1.0-rc1 --title 'N80xx System 2 GiB — v0.1.0-rc1' --notes-file /tmp/previous-release-notes.md
+          fi

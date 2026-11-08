@@ -1,17 +1,20 @@
-Gemeinsames Recovery-ZIP mit expliziten Layoutprofilen.
+One recovery ZIP with explicitly checked device/layout profiles.
 
-- N8000 mit passendem Layout: System 2048 MiB, Cache 152 MiB.
-- N8000 mit 16 GB praktisch geprüft: frisches System auf ausdrücklichen Wunsch,
-  EFS/OTA gegen unabhängige PC-Sicherung verifiziert, GPT und Dateisystemgrößen
-  geprüft, Wiederholungstest und Recovery-Neustart erfolgreich.
-- ext4 ohne Journal wird trotz der alten parted-Ausgabe `ext2` korrekt erkannt.
-- Ursprüngliche GPT, Layoutdaten und Prüfsummen werden gesichert.
-- Standardmäßig werden System, Vendor und Cache gesichert. Das Auslassen dieser
-  Images ist nur über die in README beschriebenen expliziten Testoptionen aktiv.
-- N8010-Profil experimentell, abschließender Gerätetest noch offen.
-- N8020 und unbekannte Layouts werden abgewiesen.
+- Matching N8000 layouts: System 2048 MiB, Cache 152 MiB.
+- Real N8000 16 GB test passed in explicitly requested fresh System mode:
+  independent EFS/OTA verification, GPT and filesystem checks, read-only repeat
+  run and recovery reboot.
+- ext4 without a journal is recognized even when old Parted reports ext2.
+- Original GPT regions, layout records and checksums are saved.
+- System, Vendor and Cache images are backed up by default. Skipping these
+  images requires the explicit options documented in README.
+- N8010 profile is experimental; final device verification is still pending.
+- N8020 and unknown layouts are rejected.
 
-Vor einer Umstellung EFS und persönliche Daten unabhängig sichern. Nach einer
-Umstellung mit frischem System ist eine ROM-Installation notwendig.
-Die GPT-Dateien sind keine automatische Revert-Funktion; Anleitung beachten.
-Herkunft und bekannter Stand des alten parted-Binaries: THIRD_PARTY.md.
+Create independent EFS and personal-data backups first. Fresh System mode
+requires installing a suitable ROM afterwards. GPT backup files are not an
+automatic revert function; follow the README. See THIRD_PARTY.md for the legacy
+Parted binary's provenance.
+
+This prerelease updates the documentation to English. The repartitioning
+implementation is unchanged from v0.1.0-rc1.

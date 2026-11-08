@@ -1,0 +1,37 @@
+name: Build and publish recovery ZIP
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate sources
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          sh -n package/tools/repartition.sh
+          sh -n package/tools/profiles.sh
+          sh -n package/META-INF/com/google/android/update-binary
+      - name: Build the single recovery ZIP
+        run: |
+          python3 build_zip.py
+          sha256sum --check N80xx-System-2GiB.zip.sha256
+      - name: Publish prerelease assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" N80xx-System-2GiB.zip N80xx-System-2GiB.zip.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" N80xx-System-2GiB.zip N80xx-System-2GiB.zip.sha256 \
+              --verify-tag --prerelease --title "N80xx System 2 GiB — $RELEASE_TAG" --notes-file RELEASE_NOTES.md
+          fi

@@ -1,0 +1,10 @@
+#!/sbin/sh
+set -eu
+OUTFD="$2"
+ZIP="$3"
+WORK=/tmp/n80xx-repartition
+mkdir -p "$WORK"
+unzip -o "$ZIP" 'tools/*' -d "$WORK" >/dev/null
+chmod 755 "$WORK/tools/parted" "$WORK/tools/read-range" "$WORK/tools/repartition.sh"
+export OUTFD
+exec /sbin/sh "$WORK/tools/repartition.sh" --apply

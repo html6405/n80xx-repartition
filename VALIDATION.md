@@ -1,5 +1,9 @@
 # Validation status
 
+Two separate N8000 devices were tested: first a 32 GB device, then an additional
+16 GB device. They share the same fixed partition-boundary profile; the end of
+Userdata differs with storage capacity.
+
 ## N8000, 16 GB — 2026-11-08
 
 - Original CACHE/SYSTEM/HIDDEN/OTA boundaries matched the N8000 profile.

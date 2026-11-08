@@ -12,14 +12,20 @@ Each version provides one common ZIP. Current releases are prereleases.
 
 | Device / observed layout | System target | Cache target | Boundaries preserved |
 | --- | ---: | ---: | --- |
-| N8000, original boundaries observed on the 32 GB test device | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
+| N8000, matching layout tested on both 32 GB and 16 GB devices | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
 | N8010, previously modified 16 GB test device | 2048 MiB | 704.99609375 MiB | Partitions 1–7 and 10–12 |
 
-**N8000:** the original preserving procedure was tested on a 32 GB device.
-The shared ZIP completed on a second N8000 with 16 GB on 2026-11-08, using
-fresh System mode at the owner's explicit request. Post-install checks,
-a read-only repeat run and recovery reboot passed. EFS contents and OTA were
-verified against independent PC backups. See [VALIDATION.md](VALIDATION.md).
+**N8000: two separate devices have been tested successfully.**
+
+- **First device: 32 GB.** The original preserving procedure completed and was
+  verified, including recovery reboot and preservation of EFS, Vendor and OTA.
+- **Additional device: 16 GB.** The shared ZIP completed on 2026-11-08 in fresh
+  System mode at the owner's explicit request. Post-install checks, a read-only
+  repeat run and recovery reboot passed. EFS contents and OTA were verified
+  against independent PC backups.
+
+Both N8000 capacities use the same checked layout profile; Userdata's end is
+allowed to differ. See [VALIDATION.md](VALIDATION.md) for the test details.
 
 **N8010 is experimental.** Its observed layout and preflight were checked,
 but a device run was interrupted before final verification. Inspect that

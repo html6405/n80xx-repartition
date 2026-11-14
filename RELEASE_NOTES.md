@@ -21,12 +21,13 @@ unmount internal Data safely. No microSD or PC command is required.
   remain unchanged and Data is not formatted by the ZIP.
 - N8010 remains experimental; N8020 and unknown layouts are rejected.
 
-The complete flow passed through TWRP on a 32 GB N8000, including independent
-PC verification, read-only repeat and recovery reboot. Seventeen host tests
-pass. Earlier shared-installer testing also covered a separate 16 GB N8000;
-the current two-step flow has not yet been fully verified on a 16 GB device.
+The published ZIP subsequently passed the complete flow through TWRP on both
+a 32 GB and a 16 GB N8000, including independent PC verification, read-only
+repeat and recovery reboot. Seventeen host tests pass. See the current
+VALIDATION.md for the later 16 GB retest of this unchanged ZIP.
 
-Another 16 GB test device has an unresolved MMC/controller failure, also
-reproduced outside the installer while creating a directory on Data. Neither
-reduced clock nor omitted large backups established a fix. This release does
-not diagnose or repair a hardware/recovery I/O fault. See VALIDATION.md.
+The 16 GB retest device had previously shown MMC/controller errors, also
+reproduced outside the installer while creating a directory on Data. The
+complete published-ZIP retest passed without experimental clock settings;
+the cause of the earlier errors remains undiagnosed. This release does not
+establish a general hardware/recovery I/O repair. See VALIDATION.md.

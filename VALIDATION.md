@@ -1,7 +1,8 @@
 # Validation status
 
-Two separate N8000 devices were tested: first a 32 GB device, then an additional
-16 GB device. They share the same fixed partition-boundary profile; the end of
+Successful N8000 testing covers 32 GB and 16 GB devices. The published
+v0.2.0-rc1 ZIP passed the complete two-step TWRP flow on both capacities on
+2026-11-14. They share the same fixed partition-boundary profile; the end of
 Userdata differs with storage capacity.
 
 ## N8000, 32 GB — 2026-11-14: actual two-step TWRP installation
@@ -34,7 +35,7 @@ Userdata differs with storage capacity.
   mount/write timestamps and its mount counter; all other bytes were identical.
 - System is intentionally empty for the subsequent ROM installation.
 
-## Additional N8000, 16 GB — unresolved MMC/controller failure
+## Additional N8000, 16 GB — earlier MMC failures and successful released-ZIP retest
 
 - Earlier default large-image backup tests stalled near Vendor verification.
   Flush checkpoints and delayed clock gating did not resolve the fault.
@@ -47,8 +48,26 @@ Userdata differs with storage capacity.
   protected GPT entries and EFS/Recovery/Modem/OTA against PC snapshots.
 - A diagnostic at 25 MHz instead of the original 50 MHz stalled while creating
   a directory on Data, before any test-file payload or repartitioning.
-- The failure therefore also occurs outside the ZIP. Hardware versus recovery/
-  driver cause remains unresolved; this device has no completed two-step test.
+- Those failures also occurred outside the ZIP. Their hardware versus recovery/
+  driver cause remains undiagnosed.
+- On 2026-11-14, the published v0.2.0-rc1 ZIP was retested on this same device:
+  SHA-256 `6ba90b6e79948d802c62d225ffd349a4dc6e1880f10550616618d93734d63bf1`.
+  Recovery/kernel and partition layout were unchanged; no experimental clock or
+  clock-gating adjustment was applied. Fresh critical PC snapshots were checked.
+- Both actual TWRP steps completed. The RAM copy was checksum-verified and left
+  partition sizes unchanged; the second pass performed all mandatory backups,
+  GPT changes and fresh System creation without discard in about 29 seconds.
+- No MMC/controller errors were found in the captured kernel log for this run.
+  All eight saved image/layout checksum entries passed and progress was complete.
+- Independent pre-reboot checks verified primary/backup GPT CRCs and matching
+  entries, unchanged disk GUID and entries outside Cache/System, correct kernel
+  and filesystem sizes, and byte-identical EFS/Recovery/Modem/OTA against the PC.
+- A repeat TWRP installation passed read-only checks without changes.
+- After a recovery reboot, all independent checks passed again. EFS differed
+  only at five ext4 mount/write timestamp and mount-counter bytes; all other
+  bytes, including file contents, were identical. Recovery/Modem/OTA were exact.
+- System is intentionally empty. This successful retest does not establish a
+  general repair or diagnosis for the earlier intermittent I/O failures.
 
 ## N8000, 16 GB — 2026-11-08
 

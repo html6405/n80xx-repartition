@@ -14,18 +14,18 @@ EFS, Recovery, Modem, OTA and GPT backups are mandatory and verified before
 partition changes. Internal Data is the preferred destination; no microSD
 is required when sufficient internal space is available.
 
-**Tested installation:** the complete two-step TWRP flow passed on a 32 GB
-N8000 on 2026-11-14, starting from restored original Cache/System boundaries.
-Mandatory backups, repartitioning, fresh System creation without discard,
-read-only repeat installation and recovery reboot passed. Independent PC
-checks confirmed both GPT copies, filesystem sizes and unchanged EFS,
-Recovery, Modem and OTA. See [VALIDATION.md](VALIDATION.md).
+**Tested installation:** the published v0.2.0-rc1 ZIP completed the full two-step
+TWRP flow on both a 32 GB and a 16 GB N8000 on 2026-11-14, starting from original
+Cache/System partition boundaries. Mandatory backups, fresh System creation
+without discard, read-only repeat installation and recovery reboot passed.
+Independent PC checks confirmed both GPT copies, filesystem sizes and unchanged
+EFS, Recovery, Modem and OTA. See [VALIDATION.md](VALIDATION.md).
 
-**Unresolved device-specific I/O failure:** another 16 GB N8000 stalled with
-MMC/controller errors during backups and System creation. A separate test
-also stalled merely creating a directory on Data, outside the repartitioner,
-even at a reduced MMC clock. Hardware versus recovery/driver cause remains
-unresolved. This ZIP is not a repair for that I/O failure.
+**Earlier MMC errors:** the same 16 GB test device previously stalled during
+backups, System creation and even directory creation outside the installer.
+The released ZIP subsequently passed the complete test without experimental
+clock changes, but the cause of those earlier errors remains undiagnosed.
+A successful retest does not establish a general hardware/recovery repair.
 
 ## Device support
 
@@ -34,7 +34,7 @@ unresolved. This ZIP is not a repair for that I/O failure.
 | N8000, matching layout tested on both 32 GB and 16 GB devices | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
 | N8010, previously modified 16 GB test device | 2048 MiB | 704.99609375 MiB | Partitions 1–7 and 10–12 |
 
-**N8000: two separate devices have been tested successfully.**
+**N8000: successful checks cover both 32 GB and 16 GB devices.**
 
 - **First device: 32 GB.** The original preserving procedure completed. The
   current two-step ZIP was also tested through TWRP from original partition
@@ -43,6 +43,10 @@ unresolved. This ZIP is not a repair for that I/O failure.
   System mode at the owner's explicit request. Post-install checks, a read-only
   repeat run and recovery reboot passed. EFS contents and OTA were verified
   against independent PC backups.
+
+- **Further 16 GB retest, 2026-11-14.** The published two-step TWRP ZIP
+  completed on the device that had previously shown MMC failures, including
+  independent critical-image checks, a read-only repeat and recovery reboot.
 
 Both N8000 capacities use the same checked layout profile; Userdata's end is
 allowed to differ. See [VALIDATION.md](VALIDATION.md) for the test details.

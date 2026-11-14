@@ -4,6 +4,52 @@ Two separate N8000 devices were tested: first a 32 GB device, then an additional
 16 GB device. They share the same fixed partition-boundary profile; the end of
 Userdata differs with storage capacity.
 
+## N8000, 32 GB — 2026-11-14: actual two-step TWRP installation
+
+- Recovery: TWRP 3.7.0_9-0; kernel 3.0.101-TWRP-gcbcdf2dc554.
+- The owner completed their backup and explicitly authorized erasing System.
+- Independent PC snapshots of EFS, Recovery, Modem, OTA and both GPT regions
+  were size/checksum-verified. EFS files were unchanged after the user's backup.
+- Only Cache/System were reset to the original observed partition boundaries
+  to exercise the complete repartition path. Data was not formatted.
+- Direct installation from internal storage reached the safe unmount guard.
+  Diagnostics showed TWRP's memory mapping of the source ZIP on Data, preventing
+  a regular unmount. GPT was unchanged by that aborted attempt.
+- The updated first-pass installer copied and checksum-verified the ZIP in RAM;
+  its successful staging message and unchanged partition sizes were checked.
+- Installing the same ZIP from `/tmp` through TWRP completed in approximately
+  33 seconds, including mandatory EFS/Recovery/Modem/OTA/GPT backups, Cache/System
+  partition changes and fresh System creation without discard. No MMC errors
+  were found in the captured kernel log for this complete pass.
+- Every saved image/layout checksum passed; `progress.txt` reported `complete`.
+- Primary and backup GPT header/entry CRCs passed, the tables agreed, the disk
+  GUID was unchanged, and entries outside Cache/System were byte-identical.
+- Kernel partition and filesystem sizes matched: System 2147483648 bytes;
+  Cache 159383552 bytes. Filesystem consistency checks passed.
+- EFS, Recovery, Modem and OTA matched the immediate PC snapshot byte-for-byte.
+- A repeat TWRP installation detected the finished layout and performed only
+  read-only checks, without repartitioning or formatting.
+- After rebooting recovery, independent checks again passed for both GPT copies,
+  filesystem sizes, Recovery, Modem and OTA. EFS differed only at five bytes in
+  mount/write timestamps and its mount counter; all other bytes were identical.
+- System is intentionally empty for the subsequent ROM installation.
+
+## Additional N8000, 16 GB — unresolved MMC/controller failure
+
+- Earlier default large-image backup tests stalled near Vendor verification.
+  Flush checkpoints and delayed clock gating did not resolve the fault.
+- Mandatory small backups subsequently passed, but System creation with default
+  discard stalled. After restarting recovery, isolated System creation without
+  discard and independent critical-image/layout checks passed.
+- A full ZIP retest then stalled during Modem-backup verification/checkpoint,
+  before GPT changes. Avoiding Vendor images was not a general fix.
+- After another recovery restart, independent checks again confirmed the
+  protected GPT entries and EFS/Recovery/Modem/OTA against PC snapshots.
+- A diagnostic at 25 MHz instead of the original 50 MHz stalled while creating
+  a directory on Data, before any test-file payload or repartitioning.
+- The failure therefore also occurs outside the ZIP. Hardware versus recovery/
+  driver cause remains unresolved; this device has no completed two-step test.
+
 ## N8000, 16 GB — 2026-11-08
 
 - Original CACHE/SYSTEM/HIDDEN/OTA boundaries matched the N8000 profile.
@@ -41,13 +87,16 @@ Userdata differs with storage capacity.
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
-Twelve tests cover original/completed layouts, variable capacity, incompatible
+Seventeen tests cover original/completed layouts, variable capacity, incompatible
 model/layout rejection, selected backup-space requirements and ext superblock
 validation with/without a journal, invalid magic, wrong block size, oversized
-filesystems and read failures. Shell scripts pass syntax validation.
+filesystems and read failures, flushed/verified backup copies, rejection of
+corrupt copies, and first-pass staging with corrupt-copy/copy-failure handling.
+Shell scripts pass syntax validation.
 
-Skipping Cache image backup is supported as an explicit option. The first full
-device run above retained Cache backup; the no-Cache space calculation is tested.
+The current default omits Cache/Vendor/old System images and always saves EFS,
+Recovery, Modem, OTA and GPT. Backup-space tests include all selected modes.
+The older 16 GB run retained Cache backup; the current 32 GB run did not.
 
 Private snapshots, device identifiers and raw logs remain local, excluded by the
 Git allowlist and the ZIP builder's exact package-file allowlist.

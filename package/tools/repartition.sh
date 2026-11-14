@@ -10,9 +10,9 @@ HERE=${0%/*}
 DISK=/dev/block/mmcblk0
 PARTED="$HERE/parted"
 READ_RANGE="$HERE/read-range"
-FRESH_SYSTEM=${N80XX_FRESH_SYSTEM:-0}
-BACKUP_VENDOR=${N80XX_BACKUP_VENDOR:-1}
-BACKUP_CACHE=${N80XX_BACKUP_CACHE:-1}
+FRESH_SYSTEM=${N80XX_FRESH_SYSTEM:-1}
+BACKUP_VENDOR=${N80XX_BACKUP_VENDOR:-0}
+BACKUP_CACHE=${N80XX_BACKUP_CACHE:-0}
 say() {
     echo "$*"
     if [ -n "${OUTFD:-}" ]; then
@@ -45,21 +45,59 @@ check_size() {
         /^Block size:/ {size=$2+0}
         END {exit !(count*size==expected)}'
 }
+checkpoint() {
+    printf '%s\n' 'FORMAT_VERSION=1' "PROFILE=$PROFILE" "PHASE=$1" \
+        >"$BACKUP/progress.txt.tmp"
+    sync
+    mv "$BACKUP/progress.txt.tmp" "$BACKUP/progress.txt"
+    sync
+}
 save() {
     src=$1; dst=$2
+    checkpoint "backup-copy:$dst"
     say "Backing up $dst..."
     dd if="$src" of="$BACKUP/$dst" bs=1048576 || die "Backup failed: $dst"
+    say "Flushing $dst before verification..."
+    sync
+    checkpoint "backup-flushed:$dst"
     expected_bytes=$(blockdev --getsz "$src") || die "Cannot size $src"
     expected_bytes=$(awk -v s="$expected_bytes" 'BEGIN {printf "%.0f", s*512}')
-    actual_bytes=$(wc -c <"$BACKUP/$dst")
+    actual_bytes=$(ls -ln "$BACKUP/$dst" | awk '{print $5}')
     [ "$actual_bytes" = "$expected_bytes" ] || die "Backup size mismatch: $dst"
+    say "Verifying source checksum for $dst..."
     source_hash=$(hash "$src") || die "Cannot hash source: $dst"
+    checkpoint "backup-source-hashed:$dst"
+    say "Verifying saved checksum for $dst..."
     backup_hash=$(hash "$BACKUP/$dst") || die "Cannot hash backup: $dst"
     [ "$source_hash" = "$backup_hash" ] || die "Backup checksum mismatch: $dst"
     printf '%s  %s\n' "$backup_hash" "$BACKUP/$dst" >>"$BACKUP/SHA256SUMS"
+    checkpoint "backup-verified:$dst"
     say "Verified $dst."
 }
 is_mounted() { awk -v mp="$1" '$2==mp {ok=1} END {exit !ok}' /proc/mounts; }
+log_data_references() {
+    # Failure diagnostics remain in recovery RAM and may contain private paths.
+    for ref_pid in /proc/[0-9]*; do
+        for ref_fd in "$ref_pid"/fd/* "$ref_pid"/cwd; do
+            ref_target=$(readlink "$ref_fd") || continue
+            case "$ref_target" in /data*|/sdcard*) printf '%s %s\n' "$ref_fd" "$ref_target";; esac
+        done
+        awk -v pid="$ref_pid" '/\/data\/|\/sdcard\// {print pid, $0}' "$ref_pid/maps" 2>/dev/null || :
+    done > /tmp/n80xx-open-data.txt
+}
+unmount_checked() {
+    unmount_attempt=0
+    while is_mounted "$1"; do
+        if umount "$1"; then return 0; fi
+        unmount_attempt=$((unmount_attempt + 1))
+        if [ "$unmount_attempt" -ge 5 ]; then
+            log_data_references
+            die "Cannot unmount $1; GPT unchanged. See /tmp/n80xx-open-data.txt."
+        fi
+        say "Waiting for open accesses to $1 to close..."
+        sleep 1
+    done
+}
 free_kib() { df -k "$1" | awk 'END {print $(NF-2)}'; }
 choose_backup() {
     BACKUP=
@@ -89,13 +127,13 @@ choose_backup() {
             BACKUP=$candidate
         fi
     done
-    [ -n "$BACKUP" ] || die 'Insufficient backup space. Free at least 4 GiB on the external SD and mount it at /external_sdcard.'
+    [ -n "$BACKUP" ] || die "Insufficient backup space. Need $REQUIRED_KIB KiB free on internal Data or an optional external SD."
     say "Backup destination: $BACKUP"
 }
 
 case "$FRESH_SYSTEM:$BACKUP_VENDOR:$BACKUP_CACHE" in [01]:[01]:[01]) ;; *) die 'Invalid backup mode; flags must be 0 or 1.';; esac
 BACKUP_TAG=
-for tool in e2fsck resize2fs tune2fs sha256sum dd wc blockdev mount umount readlink df awk sed cut; do
+for tool in e2fsck resize2fs tune2fs sha256sum dd wc ls mv cat blockdev mount umount readlink df awk sed cut sleep; do
     command -v "$tool" >/dev/null || die "Missing recovery tool: $tool"
 done
 [ -x "$PARTED" ] || die 'Bundled static parted missing.'
@@ -150,12 +188,16 @@ mkdir -p "$BACKUP"
 case "$BACKUP" in /data/*) chmod 700 "$BACKUP";; esac
 printf '%s\n' "$TABLE" >"$BACKUP/partitions-before.txt"
 printf '%s\n' "$PROFILE" >"$BACKUP/profile.txt"
+checkpoint backup-started
 save /dev/block/mmcblk0p3 efs.img
+save /dev/block/mmcblk0p6 recovery.img
+save /dev/block/mmcblk0p7 modem.img
 if [ "$BACKUP_VENDOR" = 1 ]; then save /dev/block/mmcblk0p10 vendor.img; fi
 save /dev/block/mmcblk0p11 ota.img
 if [ "$BACKUP_CACHE" = 1 ]; then save /dev/block/mmcblk0p8 cache.img; fi
 if [ "$FRESH_SYSTEM" = 0 ]; then save /dev/block/mmcblk0p9 system.img; fi
 SECTORS=$(blockdev --getsz "$DISK")
+checkpoint backup-gpt
 "$READ_RANGE" "$DISK" 0 8192 >"$BACKUP/gpt-primary.bin"
 "$READ_RANGE" "$DISK" "$((SECTORS - 8192))" 8192 >"$BACKUP/gpt-tail.bin"
 [ "$(wc -c <"$BACKUP/gpt-primary.bin")" = 4194304 ] || die 'Primary GPT backup size mismatch.'
@@ -170,15 +212,18 @@ printf '%s\n' 'FORMAT_VERSION=1' "PROFILE=$PROFILE" "DEVICE=$DEVICE" \
 sha256sum "$BACKUP/gpt-primary.bin" "$BACKUP/gpt-tail.bin" \
     "$BACKUP/partitions-before.txt" "$BACKUP/layout-backup.env" >>"$BACKUP/SHA256SUMS"
 sync
+checkpoint filesystem-checks
 if [ "$FRESH_SYSTEM" = 0 ]; then fsck /dev/block/mmcblk0p9; fi
 fsck /dev/block/mmcblk0p8
 say "Shrinking CACHE filesystem to $TARGET_CACHE_KIB KiB..."
+checkpoint cache-shrink
 resize2fs /dev/block/mmcblk0p8 "${TARGET_CACHE_KIB}K"
 fsck /dev/block/mmcblk0p8
 check_size /dev/block/mmcblk0p8 "$TARGET_CACHE_BYTES" || die 'CACHE shrink size mismatch; GPT unchanged.'
 sync
+checkpoint gpt-update-pending
 for mp in /sdcard /data; do
-    if is_mounted "$mp"; then umount "$mp" || die "Cannot unmount $mp; GPT unchanged."; fi
+    unmount_checked "$mp"
 done
 awk '$1 ~ /mmcblk0p|dw_mmc/ {found=1} END {exit found}' /proc/mounts || die 'Internal storage still mounted; GPT unchanged.'
 say 'Updating only CACHE/SYSTEM entries. Do not interrupt.'
@@ -189,9 +234,12 @@ TABLE_AFTER=$("$PARTED" -m -s "$DISK" unit s print)
 [ "$(blockdev --getsz /dev/block/mmcblk0p9)" = 4194304 ] || die 'Kernel SYSTEM size stale. Recover after recovery reboot.'
 mount -t ext4 /dev/block/mmcblk0p12 /data
 if [ "$FRESH_SYSTEM" = 1 ]; then
+    checkpoint system-create
     say 'Creating fresh 2 GiB SYSTEM filesystem...'
-    mke2fs -t ext4 -b 4096 -m 0 -L system -F /dev/block/mmcblk0p9
+    # Avoid discard on the legacy MMC/recovery stack before writing the new FS.
+    mke2fs -t ext4 -b 4096 -m 0 -L system -E nodiscard -F /dev/block/mmcblk0p9
 else
+    checkpoint system-restore
     say 'Restoring SYSTEM and growing its filesystem...'
     dd if="$BACKUP/system.img" of=/dev/block/mmcblk0p9 bs=1048576
     sync
@@ -202,7 +250,8 @@ fsck /dev/block/mmcblk0p9
 fsck /dev/block/mmcblk0p8
 check_size /dev/block/mmcblk0p9 2147483648 || die 'SYSTEM final size mismatch.'
 check_size /dev/block/mmcblk0p8 "$TARGET_CACHE_BYTES" || die 'CACHE final size mismatch.'
-for pair in '3 efs.img' '10 vendor.img' '11 ota.img'; do
+checkpoint final-checks
+for pair in '3 efs.img' '6 recovery.img' '7 modem.img' '10 vendor.img' '11 ota.img'; do
     set -- $pair
     if [ "$1" = 10 ] && [ "$BACKUP_VENDOR" = 0 ]; then continue; fi
     source_hash=$(hash "/dev/block/mmcblk0p$1") || die "Cannot hash partition $1"
@@ -211,6 +260,7 @@ for pair in '3 efs.img' '10 vendor.img' '11 ota.img'; do
 done
 printf '%s\n' "$TABLE_AFTER" >"$BACKUP/partitions-after.txt"
 sync
-say 'Done. SYSTEM 2048 MiB; EFS/OTA verified unchanged; vendor boundaries preserved.'
+checkpoint complete
+say 'Done. SYSTEM 2048 MiB; EFS/Recovery/Modem/OTA verified unchanged; vendor boundaries preserved.'
 if [ "$BACKUP_VENDOR" = 1 ]; then say 'Vendor image checksum also verified unchanged.'; fi
 say "Backups: $BACKUP. Reboot recovery before installing a ROM."

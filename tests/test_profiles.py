@@ -43,7 +43,7 @@ class Profiles(unittest.TestCase):
     def test_observed_n8010(self):
         result = select('p4notewifi', N8010)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.split(), ['n8010-observed-16gb', 'original', '1624056', '721916', '3630772'])
+        self.assertEqual(result.stdout.split(), ['n8010-observed-16gb', 'original', '1624056', '721916', '3671732'])
 
     def test_n8000_capacity_not_fixed(self):
         table = N8000.replace('61071360s', '30777344s').replace('61063167s:55336960s', '30769151s:25042944s')
@@ -51,10 +51,10 @@ class Profiles(unittest.TestCase):
 
     def test_selected_backup_sizes(self):
         for device, table in [('p4noterf', N8000), ('p4notewifi', N8010)]:
-            self.assertEqual(select(device, table, fresh=1, vendor=0).stdout.split()[-1], '1118208')
-            self.assertEqual(select(device, table, fresh=1, vendor=0, cache=0).stdout.split()[-1], '299008')
+            self.assertEqual(select(device, table, fresh=1, vendor=0).stdout.split()[-1], '1159168')
+            self.assertEqual(select(device, table, fresh=1, vendor=0, cache=0).stdout.split()[-1], '339968')
             self.assertEqual(select(device, table, fresh=1, vendor=1).stdout.split()[-1],
-                             '1630208' if device=='p4noterf' else '1630904')
+                             '1671168' if device=='p4noterf' else '1671864')
 
     def test_finished_layouts(self):
         for device, table, start, end, cache_sectors, old_system in [

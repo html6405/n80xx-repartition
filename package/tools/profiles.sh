@@ -41,7 +41,7 @@ select_profile() {
         return 1
     fi
     # Actual images plus two 4 MiB GPT ranges and 256 MiB reserve, rounded up.
-    REQUIRED_KIB=$(printf '%s\n' "$TABLE" | awk -F: -v fresh="${FRESH_SYSTEM:-0}" -v vendor="${BACKUP_VENDOR:-1}" -v cache="${BACKUP_CACHE:-1}" '
-        $1==3 || $1==11 || ($1==8 && cache==1) || ($1==9 && fresh==0) || ($1==10 && vendor==1) {sum+=$4+0}
+    REQUIRED_KIB=$(printf '%s\n' "$TABLE" | awk -F: -v fresh="${FRESH_SYSTEM:-1}" -v vendor="${BACKUP_VENDOR:-0}" -v cache="${BACKUP_CACHE:-0}" '
+        $1==3 || $1==6 || $1==7 || $1==11 || ($1==8 && cache==1) || ($1==9 && fresh==0) || ($1==10 && vendor==1) {sum+=$4+0}
         END {printf "%.0f\n", int((sum+1)/2)+8192+262144}')
 }

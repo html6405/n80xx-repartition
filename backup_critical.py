@@ -44,6 +44,8 @@ root.parent.chmod(0o700)
 metadata={'device':device,'model':shell('getprop ro.product.model'),
           'serial':args.serial,'sectors':sectors,'snapshot_utc':stamp,'files':{}}
 items=[('efs.img',efs,0,int(shell('blockdev --getsz '+shlex.quote(efs)))),
+       ('recovery.img','/dev/block/mmcblk0p6',0,int(shell('blockdev --getsz /dev/block/mmcblk0p6'))),
+       ('modem.img','/dev/block/mmcblk0p7',0,int(shell('blockdev --getsz /dev/block/mmcblk0p7'))),
        ('ota.img',ota,0,int(shell('blockdev --getsz '+shlex.quote(ota)))),
        ('gpt-primary.bin',disk,0,8192),('gpt-tail.bin',disk,sectors-8192,8192)]
 for name,source,start,count in items:

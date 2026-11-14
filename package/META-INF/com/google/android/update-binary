@@ -3,6 +3,35 @@ set -eu
 OUTFD="$2"
 ZIP="$3"
 WORK=/tmp/n80xx-repartition
+STAGED=/tmp/N80xx-System-2GiB.zip
+say() {
+    echo "$*"
+    echo "ui_print $*" >&"$OUTFD"
+    echo ui_print >&"$OUTFD"
+}
+# TWRP maps the source ZIP for the entire installation. An internal source
+# would keep Data busy and prevent safely rereading the partition table.
+ZIP_REAL=$(readlink -f "$ZIP")
+case "$ZIP_REAL" in
+    /tmp/*) ;;
+    *)
+        say 'STEP 1/2: copying this ZIP into recovery RAM.'
+        cp "$ZIP" "$STAGED.tmp"
+        source_digest=$(sha256sum "$ZIP"); source_digest=${source_digest%% *}
+        staged_digest=$(sha256sum "$STAGED.tmp"); staged_digest=${staged_digest%% *}
+        [ "$source_digest" = "$staged_digest" ] || {
+            say 'ERROR: RAM copy checksum mismatch. No partitions changed.'
+            exit 1
+        }
+        mv "$STAGED.tmp" "$STAGED"
+        say 'STEP 1/2 COMPLETE. No partitions have been changed.'
+        say 'Return to Install, browse to /tmp, and install:'
+        say "$STAGED"
+        say 'Do not reboot between these two steps.'
+        exit 0
+        ;;
+esac
+say 'STEP 2/2: running the repartitioner from recovery RAM.'
 mkdir -p "$WORK"
 unzip -o "$ZIP" 'tools/*' -d "$WORK" >/dev/null
 chmod 755 "$WORK/tools/parted" "$WORK/tools/read-range" "$WORK/tools/repartition.sh"

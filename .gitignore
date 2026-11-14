@@ -31,3 +31,5 @@
 !tests/
 !tests/test_profiles.py
 !tests/test_filesystems.py
+!tests/test_backup_io.py
+!tests/test_staging.py

@@ -26,13 +26,48 @@ N8010 = 'BYT;\n/dev/block/mmcblk0:30777344s:sd/mmc:512:512:gpt:MMC;\n' + COMMON 
 12:6860135s:30777310s:23917176s:ext4:USERDATA:;
 '''
 
-def select(device, table, fresh=0, vendor=1, cache=1):
+# Physical N8020 geometry and case-sensitive by-name aliases from the
+# read-only recovery preflight. The parted report is modeled from them.
+N8020 = '''BYT;
+/dev/block/mmcblk0:30777344s:sd/mmc:512:512:gpt:MMC;
+1:8192s:16383s:8192s::BOTA0:;
+2:16384s:24575s:8192s::BOTA1:;
+3:24576s:65535s:40960s:ext4:EFS:;
+4:65536s:73727s:8192s::m9kefs1:;
+5:73728s:81919s:8192s::m9kefs2:;
+6:81920s:90111s:8192s::m9kefs3:;
+7:90112s:106495s:16384s::PARAM:;
+8:106496s:122879s:16384s::BOOT:;
+9:122880s:139263s:16384s::RECOVERY:;
+10:139264s:319487s:180224s:fat16:RADIO:;
+11:319488s:843775s:524288s:ext4:TOMBSTONES:;
+12:843776s:2940927s:2097152s:ext4:CACHE:;
+13:2940928s:6086655s:3145728s:ext4:SYSTEM:;
+14:6086656s:7233535s:1146880s:ext4:HIDDEN:;
+15:7233536s:7249919s:16384s::OTA:;
+16:7249920s:30769151s:23519232s:ext4:USERDATA:;
+'''
+N8020_RESIZED = N8020.replace(
+    '843776s:2940927s:2097152s', '843776s:1892351s:1048576s'
+).replace('2940928s:6086655s:3145728s', '1892352s:6086655s:4194304s')
+
+
+def select(device, table, fresh=0, vendor=1, cache=1, detail=False):
+    output = ('"$PROFILE" "$STATE" "$TARGET_SYSTEM_START" "$TARGET_CACHE_KIB" "$REQUIRED_KIB"')
+    if detail:
+        output += (' "$CACHE_PART" "$SYSTEM_PART" "$VENDOR_PART" "$OTA_PART" "$DATA_PART"'
+                   ' "$TARGET_CACHE_END" "$TARGET_CACHE_BYTES" "$backup_parts"')
+    command = ('. "$1"; DEVICE=$2; TABLE=$(cat "$3"); FRESH_SYSTEM=$4; '
+               'BACKUP_VENDOR=$5; BACKUP_CACHE=$6; select_profile || exit 1; '
+               'printf "%s\\n" ' + output)
     with tempfile.NamedTemporaryFile(mode='w') as fixture:
         fixture.write(table)
         fixture.flush()
-        return subprocess.run(['sh', '-c', '. "$1"; DEVICE=$2; TABLE=$(cat "$3"); FRESH_SYSTEM=$4; BACKUP_VENDOR=$5; BACKUP_CACHE=$6; select_profile || exit 1; printf "%s %s %s %s %s\\n" "$PROFILE" "$STATE" "$TARGET_SYSTEM_START" "$TARGET_CACHE_KIB" "$REQUIRED_KIB"',
-                               'test', str(SCRIPT), device, fixture.name, str(fresh), str(vendor), str(cache)],
-                              text=True, capture_output=True)
+        return subprocess.run(
+            ['sh', '-c', command, 'test', str(SCRIPT), device, fixture.name,
+             str(fresh), str(vendor), str(cache)],
+            text=True, capture_output=True,
+        )
 
 class Profiles(unittest.TestCase):
     def test_observed_n8000(self):
@@ -65,6 +100,41 @@ class Profiles(unittest.TestCase):
             result = select(device, table)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.split()[1], 'resized')
+
+    def test_n8020_original_and_resized_exact_geometry(self):
+        for table, state in [(N8020, 'original'), (N8020_RESIZED, 'resized')]:
+            result = select('p4notelte', table, fresh=1, vendor=0, cache=0, detail=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.splitlines()
+            self.assertEqual(lines[:12], [
+                'n8020-observed-16gb', state, '1892352', '524288', '425984',
+                '12', '13', '14', '15', '16', '1892351', '536870912',
+            ])
+            self.assertEqual(lines[12].split(), [
+                '3:efs.img', '4:m9kefs1.img', '5:m9kefs2.img', '6:m9kefs3.img',
+                '7:param.img', '8:boot.img', '9:recovery.img', '10:modem.img', '15:ota.img',
+            ])
+
+    def test_n8020_optional_backup_sizes(self):
+        self.assertEqual(select('p4notelte', N8020, fresh=0, vendor=1, cache=1).stdout.split()[-1],
+                         str(425984 + (1536 + 560 + 1024) * 1024))
+        self.assertEqual(select('p4notelte', N8020, fresh=1, vendor=1, cache=1).stdout.split()[-1],
+                         str(425984 + (560 + 1024) * 1024))
+
+    def test_n8020_rejects_wrong_geometry_and_lte_names(self):
+        variants = [
+            N8020.replace(':m9kefs1:', ':M9KEFS1:'),
+            N8020.replace(':m9kefs1:', ':TEMP:').replace(':m9kefs2:', ':m9kefs1:').replace(':TEMP:', ':m9kefs2:'),
+            N8020.replace('90112s:106495s', '90113s:106495s'),
+            N8020.replace('2940928s:6086655s', '2940936s:6086655s'),
+            N8020.replace('7249920s:30769151s:23519232s', '7249920s:30769143s:23519224s'),
+            N8020.replace('30777344s:', '61071360s:'),
+            N8020.replace('524288s:ext4:TOMBSTONES:', '524287s:ext4:TOMBSTONES:'),
+            N8020 + '17:30769152s:30777200s:8049s::EXTRA:;\n',
+        ]
+        for table in variants:
+            self.assertNotEqual(select('p4notelte', table).returncode, 0, table)
+        self.assertNotEqual(select('p4noterf', N8020).returncode, 0)
 
     def test_reject_other_models_and_layouts(self):
         for device, table in [('p4notelte', N8010), ('p4notewifi', N8000), ('p4noterf', N8010),

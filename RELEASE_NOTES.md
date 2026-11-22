@@ -1,37 +1,33 @@
-Fresh-ROM installer with a verified two-step TWRP flow.
+This prerelease adds the observed 16 GB GT-N8020 layout and lets compatible
+TWRP sessions install the ROM immediately after repartitioning.
 
-**Existing System contents are erased. Install a compatible ROM afterwards.**
+**System is erased. Have a compatible ROM ready before starting.** Read the
+[installation and backup instructions](https://github.com/html6405/n80xx-repartition/blob/v0.2.0-rc2/README.md).
 
-1. Install the downloaded ZIP normally. Step 1 copies and checksum-verifies it
-   at `/tmp/N80xx-System-2GiB.zip`, without changing partitions.
-2. Return to Install, browse to `/tmp`, and install that same ZIP from RAM.
-   Do not reboot between the two steps. After completion, reboot recovery
-   before installing the ROM.
+1. In TWRP, leave automatic reboot disabled and install the downloaded ZIP.
+   Step 1 verifies a copy at `/tmp/N80xx-System-2GiB.zip`.
+2. Install that verified ZIP from `/tmp` without rebooting. Step 2 saves and
+   checks the critical partitions and GPT, shrinks Cache, and prepares 2 GiB
+   System.
+3. If the installer reports **ROM installation is ready in this TWRP session**,
+   install the ROM immediately in that session. For other recoveries, follow the
+   message shown by the installer.
 
-TWRP memory-maps its source ZIP. Running the repartitioner from RAM lets it
-unmount internal Data safely. No microSD or PC command is required.
+On TWRP 3.7.0_9-0, the ZIP verifies and restores any missing partition paths and
+restores the internal storage mount if it was originally present. This avoids
+starting an affected TWRP with an empty System, which could trigger a hang when
+reading Android's binary storage metadata. The ZIP also skips probing microSD
+when internal storage has enough space for the backups.
 
-- Mandatory, size/checksum-verified backups: EFS, Recovery, Modem (RADIO), OTA
-  and original GPT/layout records. Internal Data is preferred; 332 MiB free
-  includes the safety reserve. Copy backups off-device before formatting Data.
-- Vendor, Cache and old System image backups are omitted by default.
-- Fresh System is created with `mke2fs -E nodiscard`.
-- Regular unmount retries and durable progress checkpoints; no forced unmount.
-- N8000 targets: System 2048 MiB, Cache 152 MiB. Other partition boundaries
-  remain unchanged and Data is not formatted by the ZIP.
-- N8010 remains experimental; N8020 and unknown layouts are rejected.
+| Tested device/profile | Cache after repartition | Hardware validation |
+| --- | ---: | --- |
+| GT-N8000, matching 16 GB layout | 152 MiB | Both ZIP stages, same-session LOS21 installation and Android boot |
+| GT-N8010, observed previously modified 16 GB layout | About 705 MiB | Both ZIP stages, same-session LOS23.2 installation and Android boot |
+| GT-N8020, exact observed 16 GB layout | 512 MiB | Both ZIP stages and all layout checks passed. The original GPT, Cache and System were then restored byte-for-byte. ROM installation and Android boot on the resized layout remain unverified. |
 
-The published ZIP passed the complete flow through TWRP on both a 32 GB and a
-16 GB N8000, including independent PC verification, read-only repeat and
-recovery reboot. It also completed both installer stages twice on one previously
-modified 16 GB N8010. The controlled retest verified the partition table,
-filesystems and critical partitions after reboot. TWRP 3.7.0_9-0 still required
-a manual workaround to get past its splash screen with an empty System.
-See [VALIDATION.md](https://github.com/html6405/n80xx-repartition/blob/main/VALIDATION.md)
-for the verified layout and recovery details. Seventeen host tests pass.
-
-The 16 GB retest device had previously shown MMC/controller errors, also
-reproduced outside the installer while creating a directory on Data. The
-complete published-ZIP retest passed without experimental clock settings;
-the cause of the earlier errors remains undiagnosed. This release does not
-establish a general hardware/recovery I/O repair. See VALIDATION.md.
+The published RC1 ZIP also passed partitioning tests on a matching 32 GB N8000.
+The N8020 profile changes only partitions 12 (Cache) and 13 (System), and
+additionally backs up BOOT, PARAM and all three LTE modem EFS partitions.
+All profiles reject unknown layouts. The
+[validation record](https://github.com/html6405/n80xx-repartition/blob/v0.2.0-rc2/VALIDATION.md)
+identifies the exact candidate run on each device. Twenty-one host tests pass.

@@ -33,6 +33,7 @@ A successful retest does not establish a general hardware/recovery repair.
 | --- | ---: | ---: | --- |
 | N8000, matching layout tested on both 32 GB and 16 GB devices | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
 | N8010, previously modified 16 GB test device | 2048 MiB | 704.99609375 MiB | Partitions 1–7 and 10–12 |
+| N8020, exact observed 16 GB layout (candidate) | 2048 MiB | 512 MiB | Partitions 1–11 and 14–16 |
 
 **N8000: successful checks cover both 32 GB and 16 GB devices.**
 
@@ -58,18 +59,22 @@ an empty System and binary Android storage metadata. The profile remains
 experimental and covers the exact layout in the table. Review the recovery
 details in [VALIDATION.md](VALIDATION.md) before installing.
 
-**N8020 is unsupported and rejected.** Unknown or differently modified layouts
-are also rejected. Device names alone never select arbitrary new boundaries.
+**N8020: repartition tested on the exact observed 16 GB layout.** The ZIP
+completed both TWRP stages, and the independently checked result was 2 GiB
+System and 512 MiB Cache. This test covered repartitioning and Recovery device
+paths. N8020 ROM installation and Android boot are still unverified on the
+resized layout. Unknown layouts are rejected.
 
-Total storage capacity and the end of Userdata may vary. That does not imply
-blanket support for every 16 GB variant: all fixed boundaries must match an
-included profile exactly.
+Total storage capacity and the end of Userdata may vary on the N8000/N8010
+profiles. The N8020 candidate requires the exact observed capacity and Userdata
+end. All fixed boundaries must match an included profile.
 
 EFS, HIDDEN/Vendor, OTA/misc, Userdata, Boot, Recovery and bootloader partition
 boundaries are preserved. Cache shrinks; System moves towards the start of the
-disk and grows. Only GPT entries 8 and 9 are recreated. Mount configurations
-must use partition names or block devices, not the old PARTUUIDs of these two
-partitions. Supported ext filesystems must use 4096-byte blocks. ext4 without
+disk and grows. The N8000/N8010 recreate entries 8 and 9. The N8020 candidate
+recreates entries 12 and 13 and leaves all LTE partitions in place. Mount
+configurations must use partition names or block devices rather than the old
+PARTUUIDs of these two partitions. Supported ext filesystems must use 4096-byte blocks. ext4 without
 a journal is recognized through tune2fs, even if old Parted labels it ext2.
 Data must be unencrypted ext4.
 
@@ -77,8 +82,9 @@ Data must be unencrypted ext4.
 
 Create independent PC backups first, especially EFS and personal files.
 By default, the ZIP saves complete images of EFS, Recovery, Modem (RADIO) and
-OTA, plus two 4 MiB GPT regions. Vendor, Cache and the old System image are
-omitted because the intended use is a fresh ROM installation. Partition images are checked against the
+OTA, plus two 4 MiB GPT regions. The N8020 candidate also saves BOOT, PARAM and
+all three modem EFS partitions (m9kefs1–3). Vendor, Cache and the old System
+image are omitted because the intended use is a fresh ROM installation. Partition images are checked against the
 source by size and SHA-256. Required free space is calculated from the actual
 image sizes plus a 256 MiB reserve. Insufficient space causes an abort before
 creating the backup directory, unmounting filesystems or changing partitions.
@@ -88,8 +94,13 @@ exists yet, it uses the existing `/data/media`. Otherwise it can select a
 writable external SD mounted at `/external_sdcard`. The SD must be on mmcblk1;
 vfat, exfat and ext4 are accepted. Individual images for these profiles remain
 below 4 GiB, so FAT32 is supported. Backups are not split between devices and
-existing files are not deleted. The default mandatory backups require 76 MiB; with the
-256 MiB reserve, preflight requires 332 MiB free. A microSD is optional.
+existing files are not deleted. Including the 256 MiB reserve, the default
+preflight requires 332 MiB free on N8000/N8010 or 416 MiB on N8020. A microSD
+is optional.
+
+The legacy PC scripts `backup_critical.py` and `verify_layout.py` support the
+N8000/N8010 map only. The N8020 needs separate, model-aware PC backup and
+verification.
 
 The selected location contains `n80xx-repartition-backup-<profile>` with mode
 suffixes when applicable. Existing backup directories are never overwritten.
@@ -170,11 +181,12 @@ update. The installer therefore stages itself in recovery RAM first:
    `/data/media/0` for a ROM on internal storage. Otherwise, follow the
    recovery reboot instructions for your profile. Internal Data is preserved.
 
-For supported N8000 and N8010 layouts with TWRP 3.7.0_9-0, keep TWRP's **Reboot after
-installation is complete** option off. Have a compatible ROM on the device
-before repartitioning. The same-session flow verifies the partition paths and
-avoids starting TWRP with an empty System. If the ZIP reports that it cannot
-verify the paths, leave TWRP running and retain `/tmp/recovery.log` for diagnosis.
+On supported layouts with TWRP 3.7.0_9-0, keep **Reboot after installation is
+complete** off. Have a compatible ROM on the device before repartitioning.
+The same-session flow verifies the partition paths and avoids starting TWRP
+with an empty System. If the ZIP cannot verify the paths, the partitioning
+may already be complete. Leave TWRP running and retain `/tmp/recovery.log`
+for diagnosis.
 
 Do not reboot between steps 1 and 2: `/tmp` is temporary RAM storage. No microSD,
 PC command or second download is required. Direct installation of a ZIP already

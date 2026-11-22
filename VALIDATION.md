@@ -162,22 +162,44 @@ Userdata differs with storage capacity.
 - N8010 artifact SHA-256:
   `b79d4b74074949e50f542779c65fa62fbfc6c39ea1252946dd5ad5f7598ebf9d`.
 
+## N8020, exact observed 16 GB layout — 2026-11-22
+
+- Physical TWRP 3.7.0_9-0, 512-byte sectors, 30777344 sectors total. The two
+  ZIP stages completed from the original 1024 MiB Cache and 1536 MiB System.
+  Independently checked both GPT copies, all 16 kernel mappings, the PIT,
+  protected GPT entries, and the 512 MiB ext4 Cache and 2 GiB ext4 System.
+- All 13 installer backup checksums passed. The LTE EFS images, BOOT, Recovery,
+  RADIO and OTA matched the independent checks. EFS and PARAM matched the
+  snapshots taken before the GPT change, after the recovery restart.
+- The installer verified all 16 by-name links and restored the internal
+  storage bind mount in the same TWRP session. This device had no
+  `storage.xml`; no ROM was flashed as part of this test.
+- After the test, the original GPT and both affected partition images were
+  restored from verified PC backups. Both GPT copies, the PIT, the complete
+  Cache and System images, and the protected partitions passed the final
+  checks. The device was returned in the original layout.
+- Hardware test ZIP SHA-256:
+  `2318e1d08b53716c21df4affa7b74008a17f2d0976a0a8ad880cec6a1ac15275`.
+  The release ZIP uses identical installer files and updated bundled
+  documentation.
+
 ## Other profiles
 
 - N8000, 32 GB: the original preserving implementation completed and was checked
   on a real device, including EFS, Vendor and OTA verification and recovery reboot.
-- N8020: unsupported and explicitly rejected until its real layout is inspected.
+- N8020 layouts other than the exact observed 16 GB layout are rejected.
 
 ## Automated checks
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
-Eighteen tests cover original/completed layouts, variable capacity, incompatible
+Twenty-one tests cover original/completed layouts, variable capacity, incompatible
 model/layout rejection, selected backup-space requirements and ext superblock
 validation with/without a journal, invalid magic, wrong block size, oversized
 filesystems and read failures, flushed/verified backup copies, rejection of
 corrupt copies, internal backup selection without an unnecessary microSD probe,
-and first-pass staging with corrupt-copy/copy-failure handling.
+N8020 LTE partition order and backup budgets, and first-pass staging with
+corrupt-copy/copy-failure handling.
 Shell scripts pass syntax validation.
 
 The current default omits Cache/Vendor/old System images and always saves EFS,

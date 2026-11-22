@@ -13,6 +13,9 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--serial', required=True)
 parser.add_argument('--expect-device', required=True)
 args=parser.parse_args()
+if args.expect_device not in {'p4noterf', 'p4noterfxx', 'n8000', 'GT-N8000',
+                              'p4notewifi', 'p4notewifiww', 'n8010', 'GT-N8010'}:
+    parser.error('Legacy PC backup supports only N8000/N8010 layouts. Use an independently verified model-specific backup.')
 adb=['adb','-s',args.serial]
 def shell(command):
     return subprocess.check_output(adb+['shell', command]).decode().strip()

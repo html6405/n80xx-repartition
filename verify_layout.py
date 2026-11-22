@@ -15,6 +15,9 @@ parser.add_argument('--phase',choices=['before-reboot','after-reboot'],required=
 args=parser.parse_args()
 root=args.snapshot.resolve()
 metadata=json.loads((root/'metadata.json').read_text())
+if metadata['device'] not in {'p4noterf', 'p4noterfxx', 'n8000', 'GT-N8000',
+                              'p4notewifi', 'p4notewifiww', 'n8010', 'GT-N8010'}:
+    parser.error('Legacy PC verifier supports only N8000/N8010 layouts. Use an independently verified model-specific check.')
 adb=['adb','-s',metadata['serial']]
 def shell(command):
     return subprocess.check_output(adb+['shell',command]).decode().strip()

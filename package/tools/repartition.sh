@@ -1,5 +1,5 @@
 #!/sbin/sh
-# Candidate: exact N8000/N8010 profiles, immutable SYSTEM end and partitions 1-7/10-12.
+# Exact layout profiles. Only CACHE and SYSTEM boundaries may change.
 set -eu
 umask 077
 MODE=${1:---check}
@@ -76,43 +76,55 @@ save() {
 }
 is_mounted() { awk -v mp="$1" '$2==mp {ok=1} END {exit !ok}' /proc/mounts; }
 
-same_session_environment() {
-    by_name=/dev/block/platform/dw_mmc/by-name
+# Check the entire kernel map before touching a partition after a GPT reread.
+verify_kernel_map() {
+    map_table=$1
+    map_part=0
+    for map_name in $PARTITION_NAMES; do
+        map_part=$((map_part + 1))
+        node="/dev/block/mmcblk0p$map_part"
+        [ -b "$node" ] || return 1
+        geometry=$(printf '%s\n' "$map_table" | awk -F: -v number="$map_part" -v name="$map_name" '
+            $1==number && $6==name {printf "%.0f %.0f\n", $2+0, $4+0}')
+        start=$(cat "/sys/class/block/mmcblk0p$map_part/start") || return 1
+        size=$(cat "/sys/class/block/mmcblk0p$map_part/size") || return 1
+        [ "$geometry" = "$start $size" ] || return 1
+    done
+}
+
+check_by_name_directory() {
     command -v ln >/dev/null || return 1
     awk '$2=="/dev" && $3=="tmpfs" {ok=1} END {exit !ok}' /proc/mounts || return 1
-    [ "$(readlink -f "$by_name")" = "$by_name" ] && [ -d "$by_name" ]
+    [ -d "$BY_NAME" ] && [ "$(readlink -f "$BY_NAME")" = "$BY_NAME" ]
+}
+
+verify_existing_aliases() {
+    alias_part=0
+    for alias_name in $PARTITION_NAMES; do
+        alias_part=$((alias_part + 1))
+        alias="$BY_NAME/$alias_name"
+        if [ -e "$alias" ] || [ -L "$alias" ]; then
+            [ -L "$alias" ] &&
+                [ "$(readlink -f "$alias")" = "/dev/block/mmcblk0p$alias_part" ] || return 1
+        fi
+    done
 }
 
 # The GPT reread can remove ueventd's by-name links in legacy TWRP. With an
 # empty System, legacy TWRP can hang during a recovery reboot.
 prepare_same_session_rom_install() {
-    same_session_environment || return 1
+    check_by_name_directory || return 1
     mount_source=$(awk '$2=="/data" && $3=="ext4" {print $1}' /proc/mounts)
-    [ -n "$mount_source" ] && [ "$(readlink -f "$mount_source")" = /dev/block/mmcblk0p12 ] || return 1
+    [ -n "$mount_source" ] && [ "$(readlink -f "$mount_source")" = "$DATA_DEVICE" ] || return 1
 
-    # Check every kernel partition against the validated, on-disk GPT before
-    # creating any alias. Never replace an existing link or device node.
+    verify_kernel_map "$TABLE_AFTER" && verify_existing_aliases || return 1
+    # Create only missing aliases; never replace a link or device node.
     links_created=0
     number=0
-    for name in BOTA0 BOTA1 EFS PARAM BOOT RECOVERY RADIO CACHE SYSTEM HIDDEN OTA USERDATA; do
+    for name in $PARTITION_NAMES; do
         number=$((number + 1))
         node="/dev/block/mmcblk0p$number"
-        alias="$by_name/$name"
-        [ -b "$node" ] || return 1
-        geometry=$(printf '%s\n' "$TABLE_AFTER" | awk -F: -v number="$number" -v name="$name" '
-            $1==number && $6==name {printf "%.0f %.0f\n", $2+0, $4+0}')
-        start=$(cat "/sys/class/block/mmcblk0p$number/start") || return 1
-        size=$(cat "/sys/class/block/mmcblk0p$number/size") || return 1
-        [ "$geometry" = "$start $size" ] || return 1
-        if [ -e "$alias" ] || [ -L "$alias" ]; then
-            [ -L "$alias" ] && [ "$(readlink -f "$alias")" = "$node" ] || return 1
-        fi
-    done
-    number=0
-    for name in BOTA0 BOTA1 EFS PARAM BOOT RECOVERY RADIO CACHE SYSTEM HIDDEN OTA USERDATA; do
-        number=$((number + 1))
-        node="/dev/block/mmcblk0p$number"
-        alias="$by_name/$name"
+        alias="$BY_NAME/$name"
         if [ ! -L "$alias" ]; then
             [ ! -e "$alias" ] && ln -s "$node" "$alias" || return 1
             links_created=$((links_created + 1))
@@ -127,11 +139,11 @@ prepare_same_session_rom_install() {
         fi
         internal_storage_is_mounted || return 1
     fi
-    say "Verified all 12 partition paths; restored $links_created missing links."
+    say "Verified all $PARTITION_COUNT partition paths; restored $links_created missing links."
 }
 
 internal_storage_is_mounted() {
-    mmc_data_dev=$(cat /sys/class/block/mmcblk0p12/dev) || return 1
+    mmc_data_dev=$(cat /sys/class/block/mmcblk0p$DATA_PART/dev) || return 1
     awk -v dev="$mmc_data_dev" '$3==dev && $4=="/media/0" && $5=="/sdcard" {ok=1} END {exit !ok}' /proc/self/mountinfo
 }
 
@@ -169,7 +181,7 @@ choose_backup() {
             mp=/data
             awk '$2=="/data" && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/ {ok=1} END {exit !ok}' /proc/mounts || continue
             source=$(awk '$2=="/data" {print $1}' /proc/mounts)
-            [ "$(readlink -f "$source")" = /dev/block/mmcblk0p12 ] || continue
+            [ "$(readlink -f "$source")" = "$DATA_DEVICE" ] || continue
         else
             mp=/external_sdcard
             awk '$2=="/external_sdcard" && $3 ~ /^(vfat|exfat|ext4)$/ && $4 ~ /(^|,)rw(,|$)/ {ok=1} END {exit !ok}' /proc/mounts || continue
@@ -204,6 +216,11 @@ DEVICE=$(getprop ro.product.device)
 TABLE=$("$PARTED" -m -s "$DISK" unit s print) || die 'Cannot read GPT.'
 printf '%s\n' "$TABLE" | sed -n '2p' | awk -F: '$4==512 && $5==512 && $6=="gpt" {ok=1} END {exit !ok}' || die 'Expected GPT with 512-byte sectors.'
 select_profile || die "Unsupported model or partition layout: $DEVICE. No changes made."
+CACHE_DEVICE="/dev/block/mmcblk0p$CACHE_PART"
+SYSTEM_DEVICE="/dev/block/mmcblk0p$SYSTEM_PART"
+DATA_DEVICE="/dev/block/mmcblk0p$DATA_PART"
+BY_NAME=/dev/block/platform/dw_mmc/by-name
+verify_kernel_map "$TABLE" || die 'Kernel and GPT maps disagree. No changes made.'
 BACKUP_TAG=$PROFILE
 if [ "$FRESH_SYSTEM" = 1 ]; then
     BACKUP_TAG="$BACKUP_TAG-fresh-system"
@@ -220,35 +237,36 @@ if [ "$BACKUP_CACHE" = 0 ]; then
 fi
 say "Profile: $PROFILE; state: $STATE. SYSTEM target: 2048 MiB."
 say "CACHE target: $TARGET_CACHE_KIB KiB. EFS/vendor/OTA/Data boundaries stay unchanged."
-system_bytes=$(partition_line 9 | awk -F: '{printf "%.0f", ($4+0)*512}')
-cache_bytes=$(partition_line 8 | awk -F: '{printf "%.0f", ($4+0)*512}')
+system_bytes=$(partition_line "$SYSTEM_PART" | awk -F: '{printf "%.0f", ($4+0)*512}')
+cache_bytes=$(partition_line "$CACHE_PART" | awk -F: '{printf "%.0f", ($4+0)*512}')
 if [ "$FRESH_SYSTEM" = 0 ] || [ "$STATE" = resized ]; then
-    check_ext /dev/block/mmcblk0p9 "$system_bytes"
+    check_ext "$SYSTEM_DEVICE" "$system_bytes"
 fi
-check_ext /dev/block/mmcblk0p8 "$cache_bytes"
+check_ext "$CACHE_DEVICE" "$cache_bytes"
 if [ "$STATE" = resized ]; then
-    check_size /dev/block/mmcblk0p9 2147483648 || die 'SYSTEM restoration/growth incomplete. Recover from the backup before retrying.'
-    check_size /dev/block/mmcblk0p8 "$TARGET_CACHE_BYTES" || die 'CACHE filesystem size mismatch.'
-    for part in /dev/block/mmcblk0p9 /dev/block/mmcblk0p8; do
+    check_size "$SYSTEM_DEVICE" 2147483648 || die 'SYSTEM restoration/growth incomplete. Recover from the backup before retrying.'
+    check_size "$CACHE_DEVICE" "$TARGET_CACHE_BYTES" || die 'CACHE filesystem size mismatch.'
+    for part in "$SYSTEM_DEVICE" "$CACHE_DEVICE"; do
         e2fsck -fn "$part" || die "Unmount and check $part in recovery."
     done
     say 'Already resized. Read-only checks passed; no changes made.'
     exit 0
 fi
+choose_backup
+[ "$MODE" = --apply ] || { say 'Preflight passed. Check only; no changes made.'; exit 0; }
 same_session=0
 restore_internal_storage=0
 if [ "$FRESH_SYSTEM" = 1 ] && [ "$(getprop ro.twrp.version)" = 3.7.0_9-0 ]; then
-    same_session_environment || die 'TWRP cannot prepare same-session ROM device paths. No partitions changed.'
+    check_by_name_directory && verify_existing_aliases ||
+        die 'Cannot prepare ROM device paths for this TWRP session. No changes made.'
     same_session=1
     if internal_storage_is_mounted; then restore_internal_storage=1; fi
 fi
-choose_backup
-[ "$MODE" = --apply ] || { say 'Preflight passed. Check only; no changes made.'; exit 0; }
 # Data must be unencrypted ext4 even when backups go to external SD.
 awk '$2=="/data" && $3=="ext4" {ok=1} END {exit !ok}' /proc/mounts || die 'Mount unencrypted ext4 Data first.'
 data_source=$(awk '$2=="/data" {print $1}' /proc/mounts)
-[ "$(readlink -f "$data_source")" = /dev/block/mmcblk0p12 ] || die 'Unexpected Data device.'
-for mp in /system /system_root /cache /efs /vendor /preload; do
+[ "$(readlink -f "$data_source")" = "$DATA_DEVICE" ] || die 'Unexpected Data device.'
+for mp in /system /system_root /cache /efs /vendor /preload $EXTRA_UNMOUNTS; do
     if is_mounted "$mp"; then umount "$mp" || die "Cannot unmount $mp"; fi
 done
 mkdir -p "$BACKUP"
@@ -257,13 +275,9 @@ case "$BACKUP" in /data/*) chmod 700 "$BACKUP";; esac
 printf '%s\n' "$TABLE" >"$BACKUP/partitions-before.txt"
 printf '%s\n' "$PROFILE" >"$BACKUP/profile.txt"
 checkpoint backup-started
-save /dev/block/mmcblk0p3 efs.img
-save /dev/block/mmcblk0p6 recovery.img
-save /dev/block/mmcblk0p7 modem.img
-if [ "$BACKUP_VENDOR" = 1 ]; then save /dev/block/mmcblk0p10 vendor.img; fi
-save /dev/block/mmcblk0p11 ota.img
-if [ "$BACKUP_CACHE" = 1 ]; then save /dev/block/mmcblk0p8 cache.img; fi
-if [ "$FRESH_SYSTEM" = 0 ]; then save /dev/block/mmcblk0p9 system.img; fi
+for item in $backup_parts; do
+    save "/dev/block/mmcblk0p${item%%:*}" "${item#*:}"
+done
 SECTORS=$(blockdev --getsz "$DISK")
 checkpoint backup-gpt
 "$READ_RANGE" "$DISK" 0 8192 >"$BACKUP/gpt-primary.bin"
@@ -272,22 +286,23 @@ checkpoint backup-gpt
 [ "$(wc -c <"$BACKUP/gpt-tail.bin")" = 4194304 ] || die 'Tail GPT backup size mismatch.'
 printf '%s\n' 'FORMAT_VERSION=1' "PROFILE=$PROFILE" "DEVICE=$DEVICE" \
     "DISK_SECTORS=$SECTORS" 'SECTOR_BYTES=512' "FRESH_SYSTEM=$FRESH_SYSTEM" \
-    "BACKUP_VENDOR=$BACKUP_VENDOR" "BACKUP_CACHE=$BACKUP_CACHE" 'ORIGINAL_CACHE_START=180224' \
-    'ORIGINAL_CACHE_END=1818623' 'ORIGINAL_SYSTEM_START=1818624' \
+    "BACKUP_VENDOR=$BACKUP_VENDOR" "BACKUP_CACHE=$BACKUP_CACHE" "ORIGINAL_CACHE_START=$CACHE_START" \
+    "ORIGINAL_CACHE_END=$ORIGINAL_CACHE_END" "ORIGINAL_SYSTEM_START=$ORIGINAL_SYSTEM_START" \
     "ORIGINAL_SYSTEM_END=$SYSTEM_END" "TARGET_CACHE_END=$TARGET_CACHE_END" \
     "TARGET_SYSTEM_START=$TARGET_SYSTEM_START" "TARGET_SYSTEM_END=$SYSTEM_END" \
-    >"$BACKUP/layout-backup.env"
+    "CACHE_PART=$CACHE_PART" "SYSTEM_PART=$SYSTEM_PART" "VENDOR_PART=$VENDOR_PART" \
+    "OTA_PART=$OTA_PART" "DATA_PART=$DATA_PART" >"$BACKUP/layout-backup.env"
 sha256sum "$BACKUP/gpt-primary.bin" "$BACKUP/gpt-tail.bin" \
     "$BACKUP/partitions-before.txt" "$BACKUP/layout-backup.env" >>"$BACKUP/SHA256SUMS"
 sync
 checkpoint filesystem-checks
-if [ "$FRESH_SYSTEM" = 0 ]; then fsck /dev/block/mmcblk0p9; fi
-fsck /dev/block/mmcblk0p8
+if [ "$FRESH_SYSTEM" = 0 ]; then fsck "$SYSTEM_DEVICE"; fi
+fsck "$CACHE_DEVICE"
 say "Shrinking CACHE filesystem to $TARGET_CACHE_KIB KiB..."
 checkpoint cache-shrink
-resize2fs /dev/block/mmcblk0p8 "${TARGET_CACHE_KIB}K"
-fsck /dev/block/mmcblk0p8
-check_size /dev/block/mmcblk0p8 "$TARGET_CACHE_BYTES" || die 'CACHE shrink size mismatch; GPT unchanged.'
+resize2fs "$CACHE_DEVICE" "${TARGET_CACHE_KIB}K"
+fsck "$CACHE_DEVICE"
+check_size "$CACHE_DEVICE" "$TARGET_CACHE_BYTES" || die 'CACHE shrink size mismatch; GPT unchanged.'
 sync
 checkpoint gpt-update-pending
 for mp in /sdcard /data; do
@@ -295,36 +310,46 @@ for mp in /sdcard /data; do
 done
 awk '$1 ~ /mmcblk0p|dw_mmc/ {found=1} END {exit found}' /proc/mounts || die 'Internal storage still mounted; GPT unchanged.'
 say 'Updating only CACHE/SYSTEM entries. Do not interrupt.'
-"$PARTED" -s "$DISK" unit s rm 9 rm 8 mkpart CACHE ext4 180224 "$TARGET_CACHE_END" mkpart SYSTEM ext4 "$TARGET_SYSTEM_START" "$SYSTEM_END" name 8 CACHE name 9 SYSTEM
-TABLE_AFTER=$("$PARTED" -m -s "$DISK" unit s print)
-[ "$(printf '%s\n' "$TABLE" | sed '/^8:/d; /^9:/d')" = "$(printf '%s\n' "$TABLE_AFTER" | sed '/^8:/d; /^9:/d')" ] || die 'Unexpected GPT change outside CACHE/SYSTEM. Keep recovery running.'
-[ "$(blockdev --getsz /dev/block/mmcblk0p8)" = "$TARGET_CACHE_SECTORS" ] || die 'Kernel CACHE size stale. Recover after recovery reboot.'
-[ "$(blockdev --getsz /dev/block/mmcblk0p9)" = 4194304 ] || die 'Kernel SYSTEM size stale. Recover after recovery reboot.'
-mount -t ext4 /dev/block/mmcblk0p12 /data
+"$PARTED" -s "$DISK" unit s rm "$SYSTEM_PART" rm "$CACHE_PART" \
+    mkpart CACHE ext4 "$CACHE_START" "$TARGET_CACHE_END" \
+    mkpart SYSTEM ext4 "$TARGET_SYSTEM_START" "$SYSTEM_END" name "$CACHE_PART" CACHE name "$SYSTEM_PART" SYSTEM
+TABLE_AFTER=$("$PARTED" -m -s "$DISK" unit s print) || die 'Cannot read GPT after update. Keep recovery running.'
+protected_table() {
+    printf '%s\n' "$1" | awk -F: -v cache="$CACHE_PART" -v system="$SYSTEM_PART" '$1!=cache && $1!=system'
+}
+[ "$(protected_table "$TABLE")" = "$(protected_table "$TABLE_AFTER")" ] ||
+    die 'Unexpected GPT change outside CACHE/SYSTEM. Keep recovery running.'
+TABLE=$TABLE_AFTER
+partition_matches "$CACHE_PART" "$CACHE_START" "$TARGET_CACHE_END" CACHE &&
+    partition_matches "$SYSTEM_PART" "$TARGET_SYSTEM_START" "$SYSTEM_END" SYSTEM ||
+    die 'Updated CACHE or SYSTEM geometry is wrong. Keep recovery running.'
+verify_kernel_map "$TABLE_AFTER" ||
+    die 'Kernel and updated GPT maps disagree. Keep recovery running and consult recovery instructions.'
+mount -t ext4 "$DATA_DEVICE" /data
 if [ "$FRESH_SYSTEM" = 1 ]; then
     checkpoint system-create
     say 'Creating fresh 2 GiB SYSTEM filesystem...'
     # Avoid discard on the legacy MMC/recovery stack before writing the new FS.
-    mke2fs -t ext4 -b 4096 -m 0 -L system -E nodiscard -F /dev/block/mmcblk0p9
+    mke2fs -t ext4 -b 4096 -m 0 -L system -E nodiscard -F "$SYSTEM_DEVICE"
 else
     checkpoint system-restore
     say 'Restoring SYSTEM and growing its filesystem...'
-    dd if="$BACKUP/system.img" of=/dev/block/mmcblk0p9 bs=1048576
+    dd if="$BACKUP/system.img" of="$SYSTEM_DEVICE" bs=1048576
     sync
-    fsck /dev/block/mmcblk0p9
-    resize2fs /dev/block/mmcblk0p9
+    fsck "$SYSTEM_DEVICE"
+    resize2fs "$SYSTEM_DEVICE"
 fi
-fsck /dev/block/mmcblk0p9
-fsck /dev/block/mmcblk0p8
-check_size /dev/block/mmcblk0p9 2147483648 || die 'SYSTEM final size mismatch.'
-check_size /dev/block/mmcblk0p8 "$TARGET_CACHE_BYTES" || die 'CACHE final size mismatch.'
+fsck "$SYSTEM_DEVICE"
+fsck "$CACHE_DEVICE"
+check_size "$SYSTEM_DEVICE" 2147483648 || die 'SYSTEM final size mismatch.'
+check_size "$CACHE_DEVICE" "$TARGET_CACHE_BYTES" || die 'CACHE final size mismatch.'
 checkpoint final-checks
-for pair in '3 efs.img' '6 recovery.img' '7 modem.img' '10 vendor.img' '11 ota.img'; do
-    set -- $pair
-    if [ "$1" = 10 ] && [ "$BACKUP_VENDOR" = 0 ]; then continue; fi
-    source_hash=$(hash "/dev/block/mmcblk0p$1") || die "Cannot hash partition $1"
-    backup_hash=$(hash "$BACKUP/$2") || die "Cannot hash backup $2"
-    [ "$source_hash" = "$backup_hash" ] || die "Partition $1 checksum changed. Keep recovery running."
+verify_parts=$CRITICAL_BACKUPS
+if [ "$BACKUP_VENDOR" = 1 ]; then verify_parts="$verify_parts $VENDOR_PART:vendor.img"; fi
+for item in $verify_parts; do
+    source_hash=$(hash "/dev/block/mmcblk0p${item%%:*}") || die "Cannot hash partition ${item%%:*}"
+    backup_hash=$(hash "$BACKUP/${item#*:}") || die "Cannot hash backup ${item#*:}"
+    [ "$source_hash" = "$backup_hash" ] || die "Partition ${item%%:*} checksum changed. Keep recovery running."
 done
 printf '%s\n' "$TABLE_AFTER" >"$BACKUP/partitions-after.txt"
 sync

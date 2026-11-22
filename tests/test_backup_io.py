@@ -85,7 +85,8 @@ free_kib() {
 '''
             result = subprocess.run(
                 ['sh', '-eu', '-c', setup + choose + 'choose_backup\n[ "$BACKUP" = "$TEST_DATA/media/0/n80xx-repartition-backup-test" ]'],
-                env=dict(os.environ, TEST_DATA=str(data), BACKUP_TAG='test', REQUIRED_KIB='339968'),
+                env=dict(os.environ, TEST_DATA=str(data), DATA_DEVICE='/dev/block/mmcblk0p12',
+                         BACKUP_TAG='test', REQUIRED_KIB='339968'),
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)

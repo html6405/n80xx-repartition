@@ -51,9 +51,11 @@ A successful retest does not establish a general hardware/recovery repair.
 Both N8000 capacities use the same checked layout profile; Userdata's end is
 allowed to differ. See [VALIDATION.md](VALIDATION.md) for the test details.
 
-**N8010 is experimental.** Its observed layout and preflight were checked,
-but a device run was interrupted before final verification. Inspect that
-device's current state before attempting further writes.
+**N8010: tested on one previously modified 16 GB device.** The published ZIP
+completed both TWRP steps and produced a verified 2 GiB System partition.
+Recovery troubleshooting was required after the first reboot, so this profile
+remains experimental. The test covers the exact layout in the table. See
+[VALIDATION.md](VALIDATION.md) for the recovery issue and follow-up checks.
 
 **N8020 is unsupported and rejected.** Unknown or differently modified layouts
 are also rejected. Device names alone never select arbitrary new boundaries.

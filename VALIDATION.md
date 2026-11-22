@@ -93,13 +93,33 @@ Userdata differs with storage capacity.
   mount counter; every other byte, including all EFS file contents, was identical.
 - No ROM was installed; fresh System is intentionally empty.
 
+## N8010, previously modified 16 GB — 2026-11-22
+
+- The published v0.2.0-rc1 ZIP completed both TWRP stages on the observed
+  16 GB layout, starting with an 800 MiB ext4 Cache. The installer produced a
+  2 GiB System and a 739241984-byte Cache. All installer backup checksums,
+  independent GPT and critical partition checks, and the read-only repeat passed
+  before reboot.
+- TWRP hung at its splash screen after reboot. During troubleshooting, it
+  logged repeated errors parsing Android's binary `/data/system/storage.xml`
+  as text XML, even with a freshly formatted ext4 Cache mounted. Temporarily
+  moving that file allowed TWRP to start. The byte-identical original was put
+  back before Android boot.
+- After separate Download-mode Cache repair attempts, System needed a fresh
+  ext4 filesystem and RADIO differed from its original image. The cause of
+  those changes was not established. System was recreated and RADIO restored
+  from the verified PC backup. Both GPT copies, the PIT, filesystem sizes,
+  EFS contents, OTA, BOOT, RADIO and the installed recovery were checked.
+  Userdata and the existing TWRP backup were preserved. The published
+  LineageOS 23.2 ROM was reinstalled and completed boot with SELinux enforcing,
+  using the 2 GiB System and an ext4 Cache.
+- This is a successful installer run for the observed layout, with manual
+  recovery required afterward. Other N8010 layouts remain untested.
+
 ## Other profiles
 
 - N8000, 32 GB: the original preserving implementation completed and was checked
   on a real device, including EFS, Vendor and OTA verification and recovery reboot.
-- N8010, observed modified 16-GB layout: layout inspection, read-only preflight
-  and a host GPT simulation passed. A device run was interrupted; final state is
-  not yet verified. Treat this profile as experimental.
 - N8020: unsupported and explicitly rejected until its real layout is inspected.
 
 ## Automated checks

@@ -23,9 +23,11 @@ unmount internal Data safely. No microSD or PC command is required.
 
 The published ZIP passed the complete flow through TWRP on both a 32 GB and a
 16 GB N8000, including independent PC verification, read-only repeat and
-recovery reboot. It also completed both installer stages on one previously
-modified 16 GB N8010. The N8010 needed manual recovery after reboot because TWRP
-hung at its splash screen. See [VALIDATION.md](https://github.com/html6405/n80xx-repartition/blob/main/VALIDATION.md)
+recovery reboot. It also completed both installer stages twice on one previously
+modified 16 GB N8010. The controlled retest verified the partition table,
+filesystems and critical partitions after reboot. TWRP 3.7.0_9-0 still required
+a manual workaround to get past its splash screen with an empty System.
+See [VALIDATION.md](https://github.com/html6405/n80xx-repartition/blob/main/VALIDATION.md)
 for the verified layout and recovery details. Seventeen host tests pass.
 
 The 16 GB retest device had previously shown MMC/controller errors, also

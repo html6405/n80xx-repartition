@@ -113,8 +113,20 @@ Userdata differs with storage capacity.
   Userdata and the existing TWRP backup were preserved. The published
   LineageOS 23.2 ROM was reinstalled and completed boot with SELinux enforcing,
   using the 2 GiB System and an ext4 Cache.
-- This is a successful installer run for the observed layout, with manual
-  recovery required afterward. Other N8010 layouts remain untested.
+- A controlled second run used the same published ZIP. Checks immediately
+  before and after the recovery reboot passed for both GPT copies, the PIT,
+  the full ext4 Cache and 2 GiB ext4 System, EFS, RADIO, OTA, BOOT and the
+  installed TWRP. No partition repair or Download-mode flash was needed.
+  The published LineageOS 23.2 ROM was restored and completed boot in
+  Enforcing mode again.
+- The second run isolated the splash hang. With LineageOS installed, TWRP
+  skipped parsing Android's binary storage metadata and reached its main menu.
+  With the fresh, empty System, TWRP tried to parse the same binary format as
+  text and hung. Temporarily moving `/data/system/storage.xml` and restarting
+  TWRP let the test continue. The original file was restored before Android
+  boot. Users of this TWRP version should plan for this manual recovery step.
+- Both installer runs covered the same device and exact layout. Other N8010
+  layouts remain untested.
 
 ## Other profiles
 

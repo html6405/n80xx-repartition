@@ -75,6 +75,66 @@ save() {
     say "Verified $dst."
 }
 is_mounted() { awk -v mp="$1" '$2==mp {ok=1} END {exit !ok}' /proc/mounts; }
+
+same_session_environment() {
+    by_name=/dev/block/platform/dw_mmc/by-name
+    command -v ln >/dev/null || return 1
+    awk '$2=="/dev" && $3=="tmpfs" {ok=1} END {exit !ok}' /proc/mounts || return 1
+    [ "$(readlink -f "$by_name")" = "$by_name" ] && [ -d "$by_name" ]
+}
+
+# The GPT reread can remove ueventd's by-name links in legacy TWRP. With an
+# empty System, legacy TWRP can hang during a recovery reboot.
+prepare_same_session_rom_install() {
+    same_session_environment || return 1
+    mount_source=$(awk '$2=="/data" && $3=="ext4" {print $1}' /proc/mounts)
+    [ -n "$mount_source" ] && [ "$(readlink -f "$mount_source")" = /dev/block/mmcblk0p12 ] || return 1
+
+    # Check every kernel partition against the validated, on-disk GPT before
+    # creating any alias. Never replace an existing link or device node.
+    links_created=0
+    number=0
+    for name in BOTA0 BOTA1 EFS PARAM BOOT RECOVERY RADIO CACHE SYSTEM HIDDEN OTA USERDATA; do
+        number=$((number + 1))
+        node="/dev/block/mmcblk0p$number"
+        alias="$by_name/$name"
+        [ -b "$node" ] || return 1
+        geometry=$(printf '%s\n' "$TABLE_AFTER" | awk -F: -v number="$number" -v name="$name" '
+            $1==number && $6==name {printf "%.0f %.0f\n", $2+0, $4+0}')
+        start=$(cat "/sys/class/block/mmcblk0p$number/start") || return 1
+        size=$(cat "/sys/class/block/mmcblk0p$number/size") || return 1
+        [ "$geometry" = "$start $size" ] || return 1
+        if [ -e "$alias" ] || [ -L "$alias" ]; then
+            [ -L "$alias" ] && [ "$(readlink -f "$alias")" = "$node" ] || return 1
+        fi
+    done
+    number=0
+    for name in BOTA0 BOTA1 EFS PARAM BOOT RECOVERY RADIO CACHE SYSTEM HIDDEN OTA USERDATA; do
+        number=$((number + 1))
+        node="/dev/block/mmcblk0p$number"
+        alias="$by_name/$name"
+        if [ ! -L "$alias" ]; then
+            [ ! -e "$alias" ] && ln -s "$node" "$alias" || return 1
+            links_created=$((links_created + 1))
+        fi
+        [ "$(readlink -f "$alias")" = "$node" ] || return 1
+    done
+    if [ "$restore_internal_storage" = 1 ]; then
+        [ -d /data/media/0 ] && [ "$(readlink -f /data/media/0)" = /data/media/0 ] || return 1
+        [ -d /sdcard ] && [ "$(readlink -f /sdcard)" = /sdcard ] || return 1
+        if ! is_mounted /sdcard; then
+            mount -o bind /data/media/0 /sdcard || return 1
+        fi
+        internal_storage_is_mounted || return 1
+    fi
+    say "Verified all 12 partition paths; restored $links_created missing links."
+}
+
+internal_storage_is_mounted() {
+    mmc_data_dev=$(cat /sys/class/block/mmcblk0p12/dev) || return 1
+    awk -v dev="$mmc_data_dev" '$3==dev && $4=="/media/0" && $5=="/sdcard" {ok=1} END {exit !ok}' /proc/self/mountinfo
+}
+
 log_data_references() {
     # Failure diagnostics remain in recovery RAM and may contain private paths.
     for ref_pid in /proc/[0-9]*; do
@@ -123,8 +183,9 @@ choose_backup() {
         available=$(free_kib "$mp")
         case "$available" in ''|*[!0-9]*) die "Cannot read free space on $mp";; esac
         say "$mp: $available KiB free; need $REQUIRED_KIB KiB including reserve."
-        if [ "$available" -ge "$REQUIRED_KIB" ] && [ -z "$BACKUP" ]; then
+        if [ "$available" -ge "$REQUIRED_KIB" ]; then
             BACKUP=$candidate
+            break
         fi
     done
     [ -n "$BACKUP" ] || die "Insufficient backup space. Need $REQUIRED_KIB KiB free on internal Data or an optional external SD."
@@ -173,6 +234,13 @@ if [ "$STATE" = resized ]; then
     done
     say 'Already resized. Read-only checks passed; no changes made.'
     exit 0
+fi
+same_session=0
+restore_internal_storage=0
+if [ "$FRESH_SYSTEM" = 1 ] && [ "$(getprop ro.twrp.version)" = 3.7.0_9-0 ]; then
+    same_session_environment || die 'TWRP cannot prepare same-session ROM device paths. No partitions changed.'
+    same_session=1
+    if internal_storage_is_mounted; then restore_internal_storage=1; fi
 fi
 choose_backup
 [ "$MODE" = --apply ] || { say 'Preflight passed. Check only; no changes made.'; exit 0; }
@@ -263,4 +331,14 @@ sync
 checkpoint complete
 say 'Done. SYSTEM 2048 MiB; EFS/Recovery/Modem/OTA verified unchanged; vendor boundaries preserved.'
 if [ "$BACKUP_VENDOR" = 1 ]; then say 'Vendor image checksum also verified unchanged.'; fi
-say "Backups: $BACKUP. Reboot recovery before installing a ROM."
+say "Backups: $BACKUP."
+if [ "$same_session" = 1 ]; then
+    if prepare_same_session_rom_install; then
+        say 'ROM installation is ready in this TWRP session. Do not reboot yet.'
+        say 'Return to Install and select the ROM. Internal files are under /data/media/0.'
+    else
+        die 'Repartition complete, but ROM device paths could not be verified. Keep TWRP running and consult the recovery instructions.'
+    fi
+else
+    say 'Reboot recovery before installing a ROM.'
+fi

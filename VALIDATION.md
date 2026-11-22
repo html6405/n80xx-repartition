@@ -93,6 +93,25 @@ Userdata differs with storage capacity.
   mount counter; every other byte, including all EFS file contents, was identical.
 - No ROM was installed; fresh System is intentionally empty.
 
+## N8000, 16 GB — 2026-11-22: same-session ROM installation
+
+- This was a previously repartitioned N8000 running LineageOS 21. The original
+  800 MiB Cache and 1400 MiB System boundaries were recreated, and its exact
+  installed System contents were restored to the original-size partition.
+  TWRP 3.7.0_9-0 was then restarted before installing the candidate.
+- Both ZIP stages passed. Independent checks confirmed both GPT copies, the
+  PIT, 2 GiB System, 152 MiB ext4 Cache, the protected GPT entries and critical
+  partition images. All eight installer backup checksums passed.
+- The candidate restored all 12 missing by-name links and the internal
+  `/sdcard` mount. LineageOS 21 was installed from `/sdcard` in the same TWRP
+  session. The original Magisk-patched BOOT was then restored byte-for-byte,
+  and the same LineageOS build booted in Enforcing mode.
+- This N8000 had no `/data/system/storage.xml`. This confirms that the
+  same-session flow works on the tested N8000 profile. It does not reproduce
+  the ABX parser hang observed on the N8010.
+- N8000 artifact SHA-256:
+  `5f345f90ccbcdb3ebd64b6e45c05a75fe0576cd3d659b37f955b40df5d2cb9cc`.
+
 ## N8010, previously modified 16 GB — 2026-11-22
 
 - The published v0.2.0-rc1 ZIP completed both TWRP stages on the observed
@@ -128,6 +147,21 @@ Userdata differs with storage capacity.
 - Both installer runs covered the same device and exact layout. Other N8010
   layouts remain untested.
 
+### Same-session workaround candidate
+
+- A subsequent candidate restored all 12 missing partition device links and
+  the internal-storage bind mount after updating the GPT on this N8010 with
+  TWRP 3.7.0_9-0. Independent GPT, filesystem and critical partition checks
+  passed, as did all eight installer backup checksums.
+- The published LOS23.2 ROM was installed from internal storage in the same
+  TWRP session. Android booted in Enforcing mode. The original binary
+  `storage.xml` was byte-identical throughout the installer and ROM flash.
+- The initial candidate attempt also exposed a separate microSD read failure
+  before the installer had made any partition changes. The updated backup
+  selection skips the microSD probe when internal storage has enough room.
+- N8010 artifact SHA-256:
+  `b79d4b74074949e50f542779c65fa62fbfc6c39ea1252946dd5ad5f7598ebf9d`.
+
 ## Other profiles
 
 - N8000, 32 GB: the original preserving implementation completed and was checked
@@ -138,11 +172,12 @@ Userdata differs with storage capacity.
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
-Seventeen tests cover original/completed layouts, variable capacity, incompatible
+Eighteen tests cover original/completed layouts, variable capacity, incompatible
 model/layout rejection, selected backup-space requirements and ext superblock
 validation with/without a journal, invalid magic, wrong block size, oversized
 filesystems and read failures, flushed/verified backup copies, rejection of
-corrupt copies, and first-pass staging with corrupt-copy/copy-failure handling.
+corrupt copies, internal backup selection without an unnecessary microSD probe,
+and first-pass staging with corrupt-copy/copy-failure handling.
 Shell scripts pass syntax validation.
 
 The current default omits Cache/Vendor/old System images and always saves EFS,

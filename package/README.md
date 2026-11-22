@@ -51,9 +51,12 @@ A successful retest does not establish a general hardware/recovery repair.
 Both N8000 capacities use the same checked layout profile; Userdata's end is
 allowed to differ. See [VALIDATION.md](VALIDATION.md) for the test details.
 
-**N8010 is experimental.** Its observed layout and preflight were checked,
-but a device run was interrupted before final verification. Inspect that
-device's current state before attempting further writes.
+**N8010: tested twice on one previously modified 16 GB device.** The
+published ZIP completed both TWRP steps and produced a verified 2 GiB System
+partition. TWRP 3.7.0_9-0 could hang at its splash screen when restarted with
+an empty System and binary Android storage metadata. The profile remains
+experimental and covers the exact layout in the table. Review the recovery
+details in [VALIDATION.md](VALIDATION.md) before installing.
 
 **N8020 is unsupported and rejected.** Unknown or differently modified layouts
 are also rejected. Device names alone never select arbitrary new boundaries.
@@ -161,8 +164,17 @@ update. The installer therefore stages itself in recovery RAM first:
 2. Return to **Install**, navigate to `/tmp` in the file browser, and select
    `/tmp/N80xx-System-2GiB.zip`. This second installation performs the backup,
    repartitioning and fresh System creation. **Existing System is erased.**
-3. After the final **Done. SYSTEM 2048 MiB** message, reboot recovery and install
-   a suitable ROM. Internal Data is not formatted by this ZIP.
+3. After the final **Done. SYSTEM 2048 MiB** message, follow the installer's
+   on-screen instructions. If it reports **ROM installation is ready in this
+   TWRP session**, stay in TWRP and install the ROM immediately. Browse to
+   `/data/media/0` for a ROM on internal storage. Otherwise, follow the
+   recovery reboot instructions for your profile. Internal Data is preserved.
+
+For supported N8000 and N8010 layouts with TWRP 3.7.0_9-0, keep TWRP's **Reboot after
+installation is complete** option off. Have a compatible ROM on the device
+before repartitioning. The same-session flow verifies the partition paths and
+avoids starting TWRP with an empty System. If the ZIP reports that it cannot
+verify the paths, leave TWRP running and retain `/tmp/recovery.log` for diagnosis.
 
 Do not reboot between steps 1 and 2: `/tmp` is temporary RAM storage. No microSD,
 PC command or second download is required. Direct installation of a ZIP already
@@ -180,8 +192,8 @@ checks may fail; unmount them in recovery before repeating the check.
 An interrupted change is not automatically resumed or rolled back. On failure,
 keep recovery running and preserve the logs and backups. Do not blindly restore
 an old GPT after moving System. A pending System restore must be performed
-manually from its backup at the verified new boundaries. After success, reboot
-recovery before installing a suitable ROM.
+manually from its backup at the verified new boundaries. After a successful
+install, follow the recovery or same-session ROM instructions shown by the ZIP.
 
 ## Build and tests
 

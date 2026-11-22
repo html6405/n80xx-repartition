@@ -164,8 +164,17 @@ update. The installer therefore stages itself in recovery RAM first:
 2. Return to **Install**, navigate to `/tmp` in the file browser, and select
    `/tmp/N80xx-System-2GiB.zip`. This second installation performs the backup,
    repartitioning and fresh System creation. **Existing System is erased.**
-3. After the final **Done. SYSTEM 2048 MiB** message, reboot recovery and install
-   a suitable ROM. Internal Data is not formatted by this ZIP.
+3. After the final **Done. SYSTEM 2048 MiB** message, follow the installer's
+   on-screen instructions. If it reports **ROM installation is ready in this
+   TWRP session**, stay in TWRP and install the ROM immediately. Browse to
+   `/data/media/0` for a ROM on internal storage. Otherwise, follow the
+   recovery reboot instructions for your profile. Internal Data is preserved.
+
+For supported N8000 and N8010 layouts with TWRP 3.7.0_9-0, keep TWRP's **Reboot after
+installation is complete** option off. Have a compatible ROM on the device
+before repartitioning. The same-session flow verifies the partition paths and
+avoids starting TWRP with an empty System. If the ZIP reports that it cannot
+verify the paths, leave TWRP running and retain `/tmp/recovery.log` for diagnosis.
 
 Do not reboot between steps 1 and 2: `/tmp` is temporary RAM storage. No microSD,
 PC command or second download is required. Direct installation of a ZIP already
@@ -183,8 +192,8 @@ checks may fail; unmount them in recovery before repeating the check.
 An interrupted change is not automatically resumed or rolled back. On failure,
 keep recovery running and preserve the logs and backups. Do not blindly restore
 an old GPT after moving System. A pending System restore must be performed
-manually from its backup at the verified new boundaries. After success, reboot
-recovery before installing a suitable ROM.
+manually from its backup at the verified new boundaries. After a successful
+install, follow the recovery or same-session ROM instructions shown by the ZIP.
 
 ## Build and tests
 

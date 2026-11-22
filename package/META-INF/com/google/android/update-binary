@@ -28,6 +28,9 @@ case "$ZIP_REAL" in
         say 'Return to Install, browse to /tmp, and install:'
         say "$STAGED"
         say 'Do not reboot between these two steps.'
+        if [ "$(getprop ro.twrp.version)" = 3.7.0_9-0 ]; then
+            say 'Keep automatic reboot off and have your ROM ZIP ready.'
+        fi
         exit 0
         ;;
 esac

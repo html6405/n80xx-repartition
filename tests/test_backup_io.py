@@ -54,4 +54,42 @@ hash() {
                 self.assertIn('PHASE=backup-verified:sample.img',(backup/'progress.txt').read_text())
     def test_flush_and_durable_success(self): self.exercise()
     def test_corrupt_copy_rejected(self): self.exercise(True)
+
+
+class BackupDestination(unittest.TestCase):
+    def test_does_not_probe_sd_when_internal_storage_has_enough_space(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / 'data'
+            (data / 'media/0').mkdir(parents=True)
+            sd = root / 'external_sdcard'
+            sd.mkdir()
+            mounts = root / 'mounts'
+            mounts.write_text(
+                f'/dev/block/mmcblk0p12 {data} ext4 rw 0 0\n'
+                f'/dev/block/mmcblk1p1 {sd} vfat rw 0 0\n'
+            )
+            choose = TEXT.split('choose_backup() {', 1)[1].split('\n}\n', 1)[0]
+            choose = ('choose_backup() {' + choose + '\n}\n').replace('/data', str(data))
+            choose = choose.replace('/external_sdcard', str(sd)).replace('/proc/mounts', str(mounts))
+            setup = '''
+say() { :; }
+die() { echo "$*" >&2; exit 1; }
+readlink() {
+    case "$2" in /dev/block/mmcblk*) printf '%s\n' "$2";; *) command readlink "$@";; esac
+}
+free_kib() {
+    [ "$1" = "$TEST_DATA" ] || { echo 'Unexpected microSD probe' >&2; return 1; }
+    echo 400000
+}
+'''
+            result = subprocess.run(
+                ['sh', '-eu', '-c', setup + choose + 'choose_backup\n[ "$BACKUP" = "$TEST_DATA/media/0/n80xx-repartition-backup-test" ]'],
+                env=dict(os.environ, TEST_DATA=str(data), BACKUP_TAG='test', REQUIRED_KIB='339968'),
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('microSD probe', result.stderr)
+
+
 if __name__=='__main__': unittest.main()

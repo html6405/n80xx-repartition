@@ -20,6 +20,10 @@ N8000 = 'BYT;\n/dev/block/mmcblk0:61071360s:sd/mmc:512:512:gpt:MMC;\n' + COMMON 
 11:5709824s:5726207s:16384s::OTA:;
 12:5726208s:61063167s:55336960s:ext4:USERDATA:;
 '''
+N8010_STOCK_32GB = N8000.replace('2867200s:ext4:SYSTEM:', '2867200s:ext2:SYSTEM:')
+N8010_STOCK_16GB = N8010_STOCK_32GB.replace(
+    '61071360s:', '30777344s:'
+).replace('61063167s:55336960s', '30769151s:25042944s')
 N8010 = 'BYT;\n/dev/block/mmcblk0:30777344s:sd/mmc:512:512:gpt:MMC;\n' + COMMON + '''9:1818624s:5818359s:3999736s:ext2:SYSTEM:;
 10:5818360s:6843750s:1025391s:ext2:HIDDEN:;
 11:6843751s:6860134s:16384s::OTA:;
@@ -80,6 +84,25 @@ class Profiles(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.split(), ['n8010-observed-16gb', 'original', '1624056', '721916', '3671732'])
 
+    def test_stock_n8010_original_and_resized_on_both_capacities(self):
+        # Issue #1 supplies the 32 GB table; issue #2 confirms the fixed
+        # stock boundaries on 16 GB devices.
+        aliases = ('p4notewifi', 'p4notewifiww', 'n8010', 'GT-N8010')
+        for alias in aliases:
+            for original in (N8010_STOCK_16GB, N8010_STOCK_32GB):
+                resized = original.replace(
+                    '180224s:1818623s:1638400s', '180224s:491519s:311296s'
+                ).replace('1818624s:4685823s:2867200s', '491520s:4685823s:4194304s')
+                for table, state in ((original, 'original'), (resized, 'resized')):
+                    with self.subTest(alias=alias, state=state, disk=original.splitlines()[1]):
+                        result = select(alias, table, fresh=1, vendor=0, cache=0, detail=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(result.stdout.splitlines(), [
+                            'n8010-stock', state, '491520', '155648', '339968',
+                            '8', '9', '10', '11', '12', '491519', '159383552',
+                            '3:efs.img 6:recovery.img 7:modem.img 11:ota.img',
+                        ])
+
     def test_n8000_capacity_not_fixed(self):
         table = N8000.replace('61071360s', '30777344s').replace('61063167s:55336960s', '30769151s:25042944s')
         self.assertEqual(select('p4noterf', table).returncode, 0)
@@ -137,7 +160,11 @@ class Profiles(unittest.TestCase):
         self.assertNotEqual(select('p4noterf', N8020).returncode, 0)
 
     def test_reject_other_models_and_layouts(self):
-        for device, table in [('p4notelte', N8010), ('p4notewifi', N8000), ('p4noterf', N8010),
+        for device, table in [('p4notelte', N8010), ('p4noterf', N8010),
+                              ('GT-N8013', N8010_STOCK_16GB),
+                              ('p4notewifi', N8010_STOCK_32GB.replace('5726208s:', '5726216s:')),
+                              ('p4notewifi', N8010_STOCK_32GB.replace('4685824s:5709823s:1024000s', '4685832s:5709823s:1023992s')),
+                              ('p4notewifi', N8010_STOCK_32GB.replace('1818624s:4685823s:2867200s', '1624056s:4685823s:3061768s')),
                               ('p4notewifi', N8010.replace('6860135s:', '6860136s:')),
                               ('p4notewifi', N8010.replace(':OTA:', ':UNKNOWN:')),
                               ('p4notewifi', N8010 + '13:30777311s:30777312s:2s::EXTRA:;\n'),

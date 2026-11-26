@@ -32,6 +32,7 @@ A successful retest does not establish a general hardware/recovery repair.
 | Device / observed layout | System target | Cache target | Boundaries preserved |
 | --- | ---: | ---: | --- |
 | N8000, matching layout tested on both 32 GB and 16 GB devices | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
+| N8010, stock boundaries reported on 16 GB and 32 GB devices | 2048 MiB | 152 MiB | Partitions 1–7 and 10–12 |
 | N8010, previously modified 16 GB test device | 2048 MiB | 704.99609375 MiB | Partitions 1–7 and 10–12 |
 | N8020, exact observed 16 GB layout (candidate) | 2048 MiB | 512 MiB | Partitions 1–11 and 14–16 |
 
@@ -52,12 +53,17 @@ A successful retest does not establish a general hardware/recovery repair.
 Both N8000 capacities use the same checked layout profile; Userdata's end is
 allowed to differ. See [VALIDATION.md](VALIDATION.md) for the test details.
 
-**N8010: tested twice on one previously modified 16 GB device.** The
-published ZIP completed both TWRP steps and produced a verified 2 GiB System
-partition. TWRP 3.7.0_9-0 could hang at its splash screen when restarted with
-an empty System and binary Android storage metadata. The profile remains
-experimental and covers the exact layout in the table. Review the recovery
-details in [VALIDATION.md](VALIDATION.md) before installing.
+**N8010: two layout profiles.** The ZIP checks the actual GPT. The stock
+profile leaves 152 MiB Cache. The previously modified 16 GB profile leaves
+about 705 MiB because its original System ends at a different sector. Both
+profiles preserve HIDDEN, OTA and Userdata boundaries and produce 2 GiB
+System. No PIT flash is needed for either matching layout.
+
+The November 22 LineageOS 23.2 N8010 package declares no minimum Cache size.
+Users reported that the ROM boots with 152 MiB Cache on four stock 16 GB
+devices after using the matching geometry manually. The new ZIP profile was
+checked on the host for both reported capacities. See
+[VALIDATION.md](VALIDATION.md) for test coverage and the TWRP splash issue.
 
 **N8020: repartition tested on the exact observed 16 GB layout.** The ZIP
 completed both TWRP stages, and the independently checked result was 2 GiB

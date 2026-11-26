@@ -112,6 +112,20 @@ Userdata differs with storage capacity.
 - N8000 artifact SHA-256:
   `5f345f90ccbcdb3ebd64b6e45c05a75fe0576cd3d659b37f955b40df5d2cb9cc`.
 
+## N8010, reported stock boundaries — 2026-11-26
+
+- [Issue #1](https://github.com/html6405/n80xx-repartition/issues/1) supplied a
+  32 GB GPT table and reported successful RAM staging only.
+- [Issue #2](https://github.com/html6405/n80xx-repartition/issues/2) reported the
+  same fixed boundaries on four stock 16 GB units, successful repartitioning
+  with a manually adapted RC2 profile, and a LineageOS 23.2 Enforcing boot
+  with 152 MiB Cache. These are community results.
+- The new stock profile passes host checks for the original and resized GPT
+  on both capacities. It produces 2 GiB System and 152 MiB Cache without
+  moving HIDDEN, OTA or Userdata. The previously modified profile and its
+  larger Cache are retained. The new ZIP itself has no physical stock N8010
+  install or OTA cycle on record.
+
 ## N8010, previously modified 16 GB — 2026-11-22
 
 - The published v0.2.0-rc1 ZIP completed both TWRP stages on the observed
@@ -144,8 +158,7 @@ Userdata differs with storage capacity.
   text and hung. Temporarily moving `/data/system/storage.xml` and restarting
   TWRP let the test continue. The original file was restored before Android
   boot. Users of this TWRP version should plan for this manual recovery step.
-- Both installer runs covered the same device and exact layout. Other N8010
-  layouts remain untested.
+- Both installer runs covered the same device and exact layout.
 
 ### Same-session workaround candidate
 
@@ -193,7 +206,7 @@ Userdata differs with storage capacity.
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
-Twenty-one tests cover original/completed layouts, variable capacity, incompatible
+Twenty-two tests cover original/completed layouts, variable capacity, incompatible
 model/layout rejection, selected backup-space requirements and ext superblock
 validation with/without a journal, invalid magic, wrong block size, oversized
 filesystems and read failures, flushed/verified backup copies, rejection of

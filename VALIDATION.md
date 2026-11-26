@@ -125,6 +125,11 @@ Userdata differs with storage capacity.
   moving HIDDEN, OTA or Userdata. The previously modified profile and its
   larger Cache are retained. The new ZIP itself has no physical stock N8010
   install or OTA cycle on record.
+- A separate host simulation used the profile extracted from the new ZIP
+  and native GNU Parted on sparse 16 GB and 32 GB disk images. It verified
+  both GPT checksums, byte-identical protected entries and disk GUID, and
+  unchanged sentinels outside the GPT. This does not exercise the bundled
+  ARM Parted or TWRP on a stock device.
 
 ## N8010, previously modified 16 GB — 2026-11-22
 
